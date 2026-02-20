@@ -20,23 +20,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup MSYS2
+      - name: Setup MSYS2 and dependencies
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
           install: >-
-            make
-            unzip
-            curl
-            git
+            make unzip curl git
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-assimp
+            mingw-w64-x86_64-cairo
+            mingw-w64-x86_64-curl
+            mingw-w64-x86_64-freeimage
+            mingw-w64-x86_64-glew
+            mingw-w64-x86_64-glfw
+            mingw-w64-x86_64-glm
+            mingw-w64-x86_64-fmt
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-brotli
+            mingw-w64-x86_64-libpng
+            mingw-w64-x86_64-harfbuzz
+            mingw-w64-x86_64-libsndfile
+            mingw-w64-x86_64-libusb
+            mingw-w64-x86_64-libxml2
+            mingw-w64-x86_64-mpg123
+            mingw-w64-x86_64-nlohmann-json
+            mingw-w64-x86_64-openal
+            mingw-w64-x86_64-opencv
+            mingw-w64-x86_64-pugixml
+            mingw-w64-x86_64-rtaudio
+            mingw-w64-x86_64-uriparser
+            mingw-w64-x86_64-utf8cpp
+            mingw-w64-x86_64-freetype
 
       - name: Cache openFrameworks
         id: cache-of
         uses: actions/cache@v4
         with:
           path: D:\of
-          key: of-msys2-v0.12.0-deps-v2
+          key: of-msys2-v0.12.0-v3
 
       - name: Download openFrameworks
         if: steps.cache-of.outputs.cache-hit != 'true'
@@ -46,11 +69,6 @@ jobs:
           mkdir -p /d/of
           cd /d/of && unzip -q /tmp/of.zip
           rm /tmp/of.zip
-
-      - name: Install oF dependencies
-        run: |
-          cd "/d/of/${OF_ARCHIVE}/scripts/msys2"
-          bash install_dependencies.sh --noconfirm
 
       - name: Clone ofxSpout addon
         run: |
