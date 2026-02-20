@@ -100,6 +100,7 @@ jobs:
 
       - name: Build
         run: |
+          export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig:/mingw64/share/pkgconfig:$PKG_CONFIG_PATH"
           cd "/d/of/${OF_ARCHIVE}/apps/myApps/VirtualStage"
           make Release -j$(nproc)
 
