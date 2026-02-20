@@ -93,15 +93,15 @@ jobs:
           cp addons.make.win "${PROJECT}/addons.make"
 
           # Minimal Makefile (no macOS bundle target)
-          cat > "${PROJECT}/Makefile" <<'MKEOF'
-ifneq ($(wildcard config.make),)
-	include config.make
-endif
-ifndef OF_ROOT
-	OF_ROOT=../../..
-endif
-include $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk
-MKEOF
+          printf '%s\n' \
+            'ifneq ($(wildcard config.make),)' \
+            '	include config.make' \
+            'endif' \
+            'ifndef OF_ROOT' \
+            '	OF_ROOT=../../..' \
+            'endif' \
+            'include $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk' \
+            > "${PROJECT}/Makefile"
 
       - name: Build
         run: |
