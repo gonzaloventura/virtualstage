@@ -1,0 +1,120 @@
+name: Build Windows (Spout)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+env:
+  OF_VERSION: "0.12.0"
+  OF_ARCHIVE: "of_v0.12.0_msys2_mingw64_release"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkg-config
+            git
+            unzip
+            curl
+
+      - name: Cache openFrameworks
+        id: cache-of
+        uses: actions/cache@v4
+        with:
+          path: D:\of
+          key: of-msys2-v0.12.0
+
+      - name: Download openFrameworks
+        if: steps.cache-of.outputs.cache-hit != 'true'
+        run: |
+          curl -L -o /tmp/of.zip \
+            "https://github.com/openframeworks/openFrameworks/releases/download/${OF_VERSION}/${OF_ARCHIVE}.zip"
+          mkdir -p /d/of
+          cd /d/of && unzip -q /tmp/of.zip
+          rm /tmp/of.zip
+
+      - name: Clone ofxSpout addon
+        run: |
+          ADDON_DIR="/d/of/${OF_ARCHIVE}/addons"
+          if [ ! -d "${ADDON_DIR}/ofxSpout" ]; then
+            git clone --depth 1 https://github.com/elliotwoods/ofxSpout.git "${ADDON_DIR}/ofxSpout"
+          fi
+
+      - name: Setup project in oF tree
+        run: |
+          OF_DIR="/d/of/${OF_ARCHIVE}"
+          PROJECT="${OF_DIR}/apps/myApps/VirtualStage"
+          rm -rf "${PROJECT}"
+          mkdir -p "${PROJECT}/src"
+
+          # Copy source files
+          cp src/*.h src/*.cpp "${PROJECT}/src/"
+          cp config.make "${PROJECT}/"
+
+          # Windows addons (ofxSpout + ofxGui)
+          cp addons.make.win "${PROJECT}/addons.make"
+
+          # Minimal Makefile (no macOS bundle target)
+          cat > "${PROJECT}/Makefile" << 'EOF'
+          ifneq ($(wildcard config.make),)
+          	include config.make
+          endif
+          ifndef OF_ROOT
+          	OF_ROOT=../../..
+          endif
+          include $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk
+          EOF
+
+      - name: Build
+        run: |
+          cd "/d/of/${OF_ARCHIVE}/apps/myApps/VirtualStage"
+          make Release -j$(nproc)
+
+      - name: Package artifact
+        shell: powershell
+        run: |
+          $ofDir = "D:\of\of_v0.12.0_msys2_mingw64_release"
+          $binDir = "$ofDir\apps\myApps\VirtualStage\bin"
+
+          New-Item -ItemType Directory -Path "artifact" -Force
+
+          # Copy built exe and data
+          if (Test-Path $binDir) {
+            Copy-Item -Path "$binDir\*" -Destination "artifact\" -Recurse -Force
+          }
+
+          # Bundle MinGW runtime DLLs for standalone distribution
+          $mingwBin = "C:\msys64\mingw64\bin"
+          $dlls = @(
+            "libstdc++-6.dll",
+            "libgcc_s_seh-1.dll",
+            "libwinpthread-1.dll"
+          )
+          foreach ($dll in $dlls) {
+            $src = Join-Path $mingwBin $dll
+            if (Test-Path $src) {
+              Copy-Item $src "artifact\"
+            }
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VirtualStage-Windows
+          path: artifact/

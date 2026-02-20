@@ -1,0 +1,11 @@
+bin/
+obj/
+build/
+*.app
+.DS_Store
+*.o
+*.d
+*.xcodeproj/
+*.xcconfig
+*.entitlements
+.claude/
