@@ -1,3 +1,4 @@
+#include "win_byte_fix.h"
 #include "Gizmo.h"
 
 float Gizmo::getGizmoSize(const glm::vec3& pos, const ofCamera& cam) const {

@@ -1,3 +1,4 @@
+#include "win_byte_fix.h"
 #include "ofApp.h"
 #include <GLFW/glfw3.h>
 #include "ofXml.h"

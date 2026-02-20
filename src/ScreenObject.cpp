@@ -1,3 +1,4 @@
+#include "win_byte_fix.h"
 #include "ScreenObject.h"
 
 ScreenObject::ScreenObject(const std::string& name, float width, float height)

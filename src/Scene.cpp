@@ -1,3 +1,4 @@
+#include "win_byte_fix.h"
 #include "Scene.h"
 
 void Scene::setup() {

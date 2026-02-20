@@ -1,3 +1,4 @@
+#include "win_byte_fix.h"
 #include "PropertiesPanel.h"
 
 void PropertiesPanel::setup(float x, float y) {

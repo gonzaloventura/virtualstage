@@ -1,18 +1,20 @@
-name: Build Windows (Spout)
+name: Build & Release
 
 on:
-  workflow_dispatch:
   push:
     branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
 
 env:
   OF_VERSION: "0.12.0"
-  OF_ARCHIVE: "of_v0.12.0_msys2_mingw64_release"
 
 jobs:
+  # ───────────────────────────── Windows (Spout) ─────────────────────────────
   build-windows:
     runs-on: windows-latest
-
+    env:
+      OF_ARCHIVE: of_v0.12.0_msys2_mingw64_release
     defaults:
       run:
         shell: msys2 {0}
@@ -26,7 +28,7 @@ jobs:
           msystem: MINGW64
           update: true
           install: >-
-            make unzip curl git
+            make unzip curl git zip
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-assimp
@@ -59,7 +61,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: D:\of
-          key: of-msys2-v0.12.0-v3
+          key: of-msys2-v0.12.0-v4
 
       - name: Download openFrameworks
         if: steps.cache-of.outputs.cache-hit != 'true'
@@ -100,7 +102,6 @@ jobs:
 
       - name: Create missing pkg-config files
         run: |
-          # glm package only ships cmake config, oF needs pkg-config
           GLM_VER=$(pacman -Q mingw-w64-x86_64-glm | awk '{print $2}' | cut -d- -f1)
           cat > /mingw64/lib/pkgconfig/glm.pc << PCEOF
           prefix=/mingw64
@@ -112,7 +113,6 @@ jobs:
           Cflags: -I\${includedir} -DGLM_ENABLE_EXPERIMENTAL
           PCEOF
           echo "Created glm.pc (version ${GLM_VER})"
-          pkg-config --modversion glm
 
       - name: Build
         run: |
@@ -121,33 +121,120 @@ jobs:
           make Release -j$(nproc)
 
       - name: Package artifact
-        shell: powershell
         run: |
-          $ofDir = "D:\of\of_v0.12.0_msys2_mingw64_release"
-          $binDir = "$ofDir\apps\myApps\VirtualStage\bin"
+          OF_DIR="/d/of/${OF_ARCHIVE}"
+          BIN_DIR="${OF_DIR}/apps/myApps/VirtualStage/bin"
 
-          New-Item -ItemType Directory -Path "artifact" -Force
+          mkdir -p artifact
+          cp -r "${BIN_DIR}"/* artifact/ 2>/dev/null || true
 
-          if (Test-Path $binDir) {
-            Copy-Item -Path "$binDir\*" -Destination "artifact\" -Recurse -Force
-          }
+          # Bundle all required MinGW DLLs (found via ldd)
+          EXE=$(find artifact -maxdepth 1 -name '*.exe' -print -quit)
+          if [ -n "$EXE" ]; then
+            ldd "$EXE" | grep -i '/mingw64/' | awk '{print $3}' | while read dll; do
+              [ -f "$dll" ] && cp -n "$dll" artifact/
+            done
+          fi
 
-          # Bundle MinGW runtime DLLs
-          $mingwBin = "C:\msys64\mingw64\bin"
-          $dlls = @(
-            "libstdc++-6.dll",
-            "libgcc_s_seh-1.dll",
-            "libwinpthread-1.dll"
-          )
-          foreach ($dll in $dlls) {
-            $src = Join-Path $mingwBin $dll
-            if (Test-Path $src) {
-              Copy-Item $src "artifact\"
-            }
-          }
+          cd artifact && zip -r "${GITHUB_WORKSPACE}/VirtualStage-Windows.zip" .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: VirtualStage-Windows
-          path: artifact/
+          path: VirtualStage-Windows.zip
+
+  # ──────────────────────────── macOS (Syphon) ───────────────────────────────
+  build-macos:
+    runs-on: macos-13
+    env:
+      OF_ARCHIVE: of_v0.12.0_osx_release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache openFrameworks
+        id: cache-of
+        uses: actions/cache@v4
+        with:
+          path: ~/of
+          key: of-osx-v0.12.0-v1
+
+      - name: Download openFrameworks
+        if: steps.cache-of.outputs.cache-hit != 'true'
+        run: |
+          curl -L -o /tmp/of.zip \
+            "https://github.com/openframeworks/openFrameworks/releases/download/${OF_VERSION}/${OF_ARCHIVE}.zip"
+          mkdir -p ~/of
+          cd ~/of && unzip -q /tmp/of.zip
+          rm /tmp/of.zip
+
+      - name: Clone ofxSyphon addon
+        run: |
+          ADDON_DIR=~/of/${OF_ARCHIVE}/addons
+          if [ ! -d "${ADDON_DIR}/ofxSyphon" ]; then
+            git clone --depth 1 https://github.com/astellato/ofxSyphon.git "${ADDON_DIR}/ofxSyphon"
+          fi
+
+      - name: Setup project in oF tree
+        run: |
+          OF_DIR=~/of/${OF_ARCHIVE}
+          PROJECT="${OF_DIR}/apps/myApps/VirtualStage"
+          rm -rf "${PROJECT}"
+          mkdir -p "${PROJECT}/src"
+
+          cp src/*.h src/*.cpp "${PROJECT}/src/"
+          cp config.make "${PROJECT}/"
+          cp addons.make "${PROJECT}/addons.make"
+
+          printf 'ifneq ($(wildcard config.make),)\n\tinclude config.make\nendif\nifndef OF_ROOT\n\tOF_ROOT=../../..\nendif\ninclude $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk\n' \
+            > "${PROJECT}/Makefile"
+
+      - name: Build
+        run: |
+          cd ~/of/${OF_ARCHIVE}/apps/myApps/VirtualStage
+          make Release -j$(sysctl -n hw.ncpu)
+
+      - name: Package artifact
+        run: |
+          BIN_DIR=~/of/${OF_ARCHIVE}/apps/myApps/VirtualStage/bin
+          cd "${BIN_DIR}"
+
+          if [ -d "VirtualStage.app" ]; then
+            # Ensure Syphon.framework is bundled inside the .app
+            FWDIR="VirtualStage.app/Contents/Frameworks"
+            SYPHON=~/of/${OF_ARCHIVE}/addons/ofxSyphon/libs/Syphon/lib/osx/Syphon.framework
+            if [ -d "$SYPHON" ] && [ ! -d "$FWDIR/Syphon.framework" ]; then
+              mkdir -p "$FWDIR"
+              cp -R "$SYPHON" "$FWDIR/"
+            fi
+            zip -r -y "${GITHUB_WORKSPACE}/VirtualStage-macOS.zip" VirtualStage.app
+          else
+            zip -r "${GITHUB_WORKSPACE}/VirtualStage-macOS.zip" .
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VirtualStage-macOS
+          path: VirtualStage-macOS.zip
+
+  # ─────────────────────────── GitHub Release ────────────────────────────────
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            VirtualStage-Windows/VirtualStage-Windows.zip
+            VirtualStage-macOS/VirtualStage-macOS.zip
+          generate_release_notes: true
