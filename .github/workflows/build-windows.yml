@@ -109,7 +109,7 @@ jobs:
           Name: glm
           Description: OpenGL Mathematics
           Version: ${GLM_VER}
-          Cflags: -I\${includedir}
+          Cflags: -I\${includedir} -DGLM_ENABLE_EXPERIMENTAL
           PCEOF
           echo "Created glm.pc (version ${GLM_VER})"
           pkg-config --modversion glm
