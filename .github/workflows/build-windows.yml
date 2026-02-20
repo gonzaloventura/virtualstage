@@ -98,18 +98,21 @@ jobs:
             'include $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk' \
             > "${PROJECT}/Makefile"
 
-      - name: Debug pkg-config
+      - name: Create missing pkg-config files
         run: |
-          echo "=== pkg-config binary ==="
-          which pkg-config
-          echo "=== PKG_CONFIG_PATH ==="
-          echo "$PKG_CONFIG_PATH"
-          echo "=== .pc files containing glm ==="
-          find /mingw64/lib/pkgconfig /mingw64/share/pkgconfig -name '*glm*' 2>/dev/null || echo "none found"
-          echo "=== all .pc files ==="
-          ls /mingw64/lib/pkgconfig/*.pc 2>/dev/null | head -20 || echo "none"
-          echo "=== glm package files ==="
-          pacman -Ql mingw-w64-x86_64-glm 2>/dev/null | grep -E '\.(pc|cmake)' || echo "no pc/cmake files"
+          # glm package only ships cmake config, oF needs pkg-config
+          GLM_VER=$(pacman -Q mingw-w64-x86_64-glm | awk '{print $2}' | cut -d- -f1)
+          cat > /mingw64/lib/pkgconfig/glm.pc << PCEOF
+          prefix=/mingw64
+          includedir=\${prefix}/include
+
+          Name: glm
+          Description: OpenGL Mathematics
+          Version: ${GLM_VER}
+          Cflags: -I\${includedir}
+          PCEOF
+          echo "Created glm.pc (version ${GLM_VER})"
+          pkg-config --modversion glm
 
       - name: Build
         run: |
