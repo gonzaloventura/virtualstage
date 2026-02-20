@@ -61,7 +61,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: D:\of
-          key: of-msys2-v0.12.0-v4
+          key: of-msys2-v0.12.0-v5
 
       - name: Download openFrameworks
         if: steps.cache-of.outputs.cache-hit != 'true'
@@ -118,7 +118,8 @@ jobs:
         run: |
           export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig:/mingw64/share/pkgconfig"
           cd "/d/of/${OF_ARCHIVE}/apps/myApps/VirtualStage"
-          make Release -j$(nproc)
+          # -mssse3: GCC 15 requires explicit SSSE3 flag for _mm_shuffle_epi8 used in SpoutCopy.cpp
+          make Release -j$(nproc) PROJECT_CFLAGS="-mssse3"
 
       - name: Package artifact
         run: |
@@ -146,7 +147,7 @@ jobs:
 
   # ──────────────────────────── macOS (Syphon) ───────────────────────────────
   build-macos:
-    runs-on: macos-13
+    runs-on: macos-14
     env:
       OF_ARCHIVE: of_v0.12.0_osx_release
 
@@ -158,7 +159,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/of
-          key: of-osx-v0.12.0-v1
+          key: of-osx-v0.12.0-v2
 
       - name: Download openFrameworks
         if: steps.cache-of.outputs.cache-hit != 'true'
