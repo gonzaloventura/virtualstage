@@ -98,14 +98,24 @@ jobs:
             'include $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk' \
             > "${PROJECT}/Makefile"
 
-      - name: Build
-        env:
-          PKG_CONFIG_PATH: /mingw64/lib/pkgconfig:/mingw64/share/pkgconfig
+      - name: Debug pkg-config
         run: |
+          echo "=== pkg-config binary ==="
+          which pkg-config
+          echo "=== PKG_CONFIG_PATH ==="
+          echo "$PKG_CONFIG_PATH"
+          echo "=== .pc files containing glm ==="
+          find /mingw64/lib/pkgconfig /mingw64/share/pkgconfig -name '*glm*' 2>/dev/null || echo "none found"
+          echo "=== all .pc files ==="
+          ls /mingw64/lib/pkgconfig/*.pc 2>/dev/null | head -20 || echo "none"
+          echo "=== glm package files ==="
+          pacman -Ql mingw-w64-x86_64-glm 2>/dev/null | grep -E '\.(pc|cmake)' || echo "no pc/cmake files"
+
+      - name: Build
+        run: |
+          export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig:/mingw64/share/pkgconfig"
           cd "/d/of/${OF_ARCHIVE}/apps/myApps/VirtualStage"
-          echo "pkg-config location: $(which pkg-config)"
-          echo "glm check: $(pkg-config --modversion glm 2>&1 || true)"
-          make SHELL="/mingw64/bin/bash" Release -j$(nproc)
+          make Release -j$(nproc)
 
       - name: Package artifact
         shell: powershell
