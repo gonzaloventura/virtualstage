@@ -49,8 +49,19 @@ private:
     // Menu bar
     float menuBarHeight = 25.0f;
     bool fileMenuOpen = false;
+    bool viewMenuOpen = false;
     void drawMenuBar();
     bool handleMenuClick(int x, int y); // returns true if click was consumed
+
+    // Background brightness (0=black, 30=default, 60=light)
+    int bgBrightness = 30;
+
+    // Right-click context menu
+    bool contextMenuOpen = false;
+    int contextScreenIndex = -1;
+    glm::vec2 contextMenuPos;
+    void drawContextMenu();
+    bool handleContextMenuClick(int x, int y);
 
     // Layout
     float statusBarHeight = 30.0f;

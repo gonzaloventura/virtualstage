@@ -236,9 +236,9 @@ void ScreenObject::rebuildMesh() {
             curvedMesh.addVertex(glm::vec3(x, y, z));
 
             // Tex coords: placeholder (updated before draw with actual texture size)
-            // Store normalized crop coords for now
+            // Use (1-s) because j=0 is bottom (y=-h/2) and V=0 should be top
             float texU = cropRect.x + t * cropRect.width;
-            float texV = cropRect.y + s * cropRect.height;
+            float texV = cropRect.y + (1.0f - s) * cropRect.height;
             curvedMesh.addTexCoord(glm::vec2(texU, texV));
 
             // Normal: pointing outward from arc
@@ -379,6 +379,7 @@ void ScreenObject::draw(bool viewMode) {
 
             if (mode == 1) {
                 // Curved mesh - update tex coords
+                // Note: j=0 → y=-h/2 (bottom), so use (1-s) to match flat plane's V mapping
                 auto& texCoords = curvedMesh.getTexCoords();
                 int cols = meshColumns;
                 int rows = meshRows;
@@ -387,7 +388,7 @@ void ScreenObject::draw(bool viewMode) {
                     for (int i = 0; i <= cols; i++) {
                         float t = (float)i / cols;
                         float cu = cropRect.x + t * cropRect.width;
-                        float cv = cropRect.y + s * cropRect.height;
+                        float cv = cropRect.y + (1.0f - s) * cropRect.height;
                         if (flipped) cv = 1.0f - cv;
                         texCoords[j * (cols + 1) + i] = tex.getCoordFromPercent(cu, cv);
                     }
@@ -459,7 +460,7 @@ void ScreenObject::draw(bool viewMode) {
                 for (int i = 0; i <= cols; i++) {
                     float t = (float)i / cols;
                     float cu = cropRect.x + t * cropRect.width;
-                    float cv = cropRect.y + s * cropRect.height;
+                    float cv = cropRect.y + (1.0f - s) * cropRect.height;
                     if (flipped) cv = 1.0f - cv;
                     texCoords[j * (cols + 1) + i] = tex.getCoordFromPercent(cu, cv);
                 }

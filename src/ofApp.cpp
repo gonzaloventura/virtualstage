@@ -7,7 +7,6 @@ void ofApp::setup() {
     ofSetEscapeQuitsApp(false);
     ofSetFrameRate(60);
     ofSetVerticalSync(true);
-    ofBackground(30);
 
     // Camera
     cam.setDistance(800);
@@ -40,6 +39,8 @@ void ofApp::update() {
 }
 
 void ofApp::draw() {
+    ofBackground(bgBrightness);
+
     // --- Mapping mode: full-screen 2D editor ---
     if (mappingMode) {
         drawMappingMode();
@@ -73,6 +74,11 @@ void ofApp::draw() {
         drawServerList();
         propertiesPanel.draw();
         drawToolbar();
+    }
+
+    // Context menu (drawn on top of everything except menu bar)
+    if (contextMenuOpen) {
+        drawContextMenu();
     }
 
     drawMenuBar();
@@ -399,6 +405,51 @@ void ofApp::refreshServerList() {
 
 // --- Menu Bar ---
 
+// Helper: draw a dropdown menu and return the height
+static float drawDropdown(float dropX, float dropY, float dropW,
+                          const std::vector<std::tuple<std::string, std::string, bool, bool, bool>>& items) {
+    float itemH = 24;
+    float dropH = 0;
+    for (auto& it : items) dropH += std::get<2>(it) ? 10 : itemH;
+
+    ofSetColor(0, 0, 0, 80);
+    ofDrawRectangle(dropX + 3, dropY + 3, dropW, dropH);
+    ofSetColor(50, 50, 50);
+    ofDrawRectangle(dropX, dropY, dropW, dropH);
+    ofSetColor(80);
+    ofNoFill();
+    ofDrawRectangle(dropX, dropY, dropW, dropH);
+    ofFill();
+
+    float iy = dropY;
+    for (auto& it : items) {
+        if (std::get<2>(it)) { // separator
+            ofSetColor(80);
+            ofDrawLine(dropX + 8, iy + 5, dropX + dropW - 8, iy + 5);
+            iy += 10;
+            continue;
+        }
+        if (ofGetMouseX() >= dropX && ofGetMouseX() <= dropX + dropW &&
+            ofGetMouseY() >= iy && ofGetMouseY() < iy + itemH) {
+            ofSetColor(0, 120, 200);
+            ofDrawRectangle(dropX + 1, iy, dropW - 2, itemH);
+        }
+        if (std::get<3>(it) && std::get<4>(it)) { // toggle + active
+            ofSetColor(100, 220, 100);
+            ofDrawBitmapString("*", dropX + 8, iy + 17);
+        }
+        ofSetColor(220);
+        ofDrawBitmapString(std::get<0>(it), dropX + 22, iy + 17);
+        if (!std::get<1>(it).empty()) {
+            ofSetColor(130);
+            float sw = std::get<1>(it).length() * 8;
+            ofDrawBitmapString(std::get<1>(it), dropX + dropW - sw - 10, iy + 17);
+        }
+        iy += itemH;
+    }
+    return dropH;
+}
+
 void ofApp::drawMenuBar() {
     float barW = ofGetWidth();
 
@@ -406,149 +457,101 @@ void ofApp::drawMenuBar() {
     ofSetColor(45, 45, 45);
     ofDrawRectangle(0, 0, barW, menuBarHeight);
 
-    // "File" button
-    float fileX = 10;
-    float fileW = 50;
-    bool hovered = (ofGetMouseX() >= fileX && ofGetMouseX() <= fileX + fileW &&
-                    ofGetMouseY() >= 0 && ofGetMouseY() <= menuBarHeight);
+    // Menu buttons
+    float fileX = 10, fileW = 40;
+    float viewX = fileX + fileW + 15, viewW = 42;
 
-    if (fileMenuOpen || hovered) {
+    // File button
+    bool fileHover = (ofGetMouseX() >= fileX - 5 && ofGetMouseX() <= fileX + fileW + 5 &&
+                      ofGetMouseY() >= 0 && ofGetMouseY() <= menuBarHeight);
+    if (fileMenuOpen || fileHover) {
         ofSetColor(70, 70, 70);
         ofDrawRectangle(fileX - 5, 0, fileW + 10, menuBarHeight);
     }
     ofSetColor(220);
-    ofDrawBitmapString("File", fileX + 5, menuBarHeight - 7);
+    ofDrawBitmapString("File", fileX, menuBarHeight - 7);
+
+    // View button
+    bool viewHover = (ofGetMouseX() >= viewX - 5 && ofGetMouseX() <= viewX + viewW + 5 &&
+                      ofGetMouseY() >= 0 && ofGetMouseY() <= menuBarHeight);
+    if (viewMenuOpen || viewHover) {
+        ofSetColor(70, 70, 70);
+        ofDrawRectangle(viewX - 5, 0, viewW + 10, menuBarHeight);
+    }
+    ofSetColor(220);
+    ofDrawBitmapString("View", viewX, menuBarHeight - 7);
 
     // Autosave indicator
+    float indX = viewX + viewW + 20;
     if (autosaveEnabled) {
         ofSetColor(100, 200, 100);
-        ofDrawBitmapString("[Autosave ON]", fileX + fileW + 20, menuBarHeight - 7);
+        ofDrawBitmapString("[Autosave ON]", indX, menuBarHeight - 7);
     }
 
-    // Dropdown
+    // File dropdown
+    // items: {label, shortcut, isSeparator, isToggle, toggleState}
     if (fileMenuOpen) {
-        float dropX = fileX - 5;
-        float dropY = menuBarHeight;
-        float dropW = 220;
-        float itemH = 24;
-
-        struct MenuItem {
-            std::string label;
-            std::string shortcut;
-            bool separator;
-            bool toggle;
-            bool toggleState;
+        std::vector<std::tuple<std::string, std::string, bool, bool, bool>> items = {
+            {"New Project",     "",              false, false, false},
+            {"Open Project",    "Ctrl+O",        false, false, false},
+            {"Save Project",    "Ctrl+S",        false, false, false},
+            {"Save Project As", "Ctrl+Shift+S",  false, false, false},
+            {"",                "",              true,  false, false},
+            {"Autosave (15s)",  "",              false, true,  autosaveEnabled},
+            {"",                "",              true,  false, false},
+            {"Quit",            "",              false, false, false},
         };
-        std::vector<MenuItem> items = {
-            {"New Project",     "",           false, false, false},
-            {"Open Project",    "Ctrl+O",     false, false, false},
-            {"Save Project",    "Ctrl+S",     false, false, false},
-            {"Save Project As", "Ctrl+Shift+S", false, false, false},
-            {"",                "",           true,  false, false},
-            {"Autosave (15s)",  "",           false, true,  autosaveEnabled},
-            {"",                "",           true,  false, false},
-            {"Quit",            "",           false, false, false},
+        drawDropdown(fileX - 5, menuBarHeight, 220, items);
+    }
+
+    // View dropdown
+    if (viewMenuOpen) {
+        std::vector<std::tuple<std::string, std::string, bool, bool, bool>> items = {
+            {"Background: Light",   "", false, true, bgBrightness == 60},
+            {"Background: Default", "", false, true, bgBrightness == 30},
+            {"Background: Dark",    "", false, true, bgBrightness == 10},
+            {"Background: Black",   "", false, true, bgBrightness == 0},
         };
-
-        float dropH = 0;
-        for (auto& it : items) dropH += it.separator ? 10 : itemH;
-
-        // Shadow
-        ofSetColor(0, 0, 0, 80);
-        ofDrawRectangle(dropX + 3, dropY + 3, dropW, dropH);
-
-        // Background
-        ofSetColor(50, 50, 50);
-        ofDrawRectangle(dropX, dropY, dropW, dropH);
-
-        // Border
-        ofSetColor(80);
-        ofNoFill();
-        ofDrawRectangle(dropX, dropY, dropW, dropH);
-        ofFill();
-
-        // Items
-        float iy = dropY;
-        for (auto& it : items) {
-            if (it.separator) {
-                ofSetColor(80);
-                ofDrawLine(dropX + 8, iy + 5, dropX + dropW - 8, iy + 5);
-                iy += 10;
-                continue;
-            }
-
-            // Hover highlight
-            if (ofGetMouseX() >= dropX && ofGetMouseX() <= dropX + dropW &&
-                ofGetMouseY() >= iy && ofGetMouseY() < iy + itemH) {
-                ofSetColor(0, 120, 200);
-                ofDrawRectangle(dropX + 1, iy, dropW - 2, itemH);
-            }
-
-            // Toggle check mark
-            if (it.toggle && it.toggleState) {
-                ofSetColor(100, 220, 100);
-                ofDrawBitmapString("*", dropX + 8, iy + 17);
-            }
-
-            ofSetColor(220);
-            ofDrawBitmapString(it.label, dropX + 22, iy + 17);
-
-            // Shortcut text (right-aligned)
-            if (!it.shortcut.empty()) {
-                ofSetColor(130);
-                float sw = it.shortcut.length() * 8;
-                ofDrawBitmapString(it.shortcut, dropX + dropW - sw - 10, iy + 17);
-            }
-
-            iy += itemH;
-        }
+        drawDropdown(viewX - 5, menuBarHeight, 200, items);
     }
 
     ofSetColor(255);
 }
 
 bool ofApp::handleMenuClick(int x, int y) {
-    float fileX = 10;
-    float fileW = 50;
+    float fileX = 10, fileW = 40;
+    float viewX = fileX + fileW + 15, viewW = 42;
+    float itemH = 24;
 
     // Click on "File" button
     if (x >= fileX - 5 && x <= fileX + fileW + 5 && y >= 0 && y <= menuBarHeight) {
         fileMenuOpen = !fileMenuOpen;
+        viewMenuOpen = false;
+        contextMenuOpen = false;
         return true;
     }
 
-    // Click on dropdown items
+    // Click on "View" button
+    if (x >= viewX - 5 && x <= viewX + viewW + 5 && y >= 0 && y <= menuBarHeight) {
+        viewMenuOpen = !viewMenuOpen;
+        fileMenuOpen = false;
+        contextMenuOpen = false;
+        return true;
+    }
+
+    // File dropdown clicks
     if (fileMenuOpen) {
-        float dropX = fileX - 5;
-        float dropY = menuBarHeight;
-        float dropW = 220;
-        float itemH = 24;
+        float dropX = fileX - 5, dropW = 220;
+        bool isSep[] = {false, false, false, false, true, false, true, false};
+        int total = 8;
+        float iy = menuBarHeight;
 
         if (x >= dropX && x <= dropX + dropW) {
-            // Determine which item was clicked
-            int separators[] = {4, 6}; // indices of separator items
-            float iy = dropY;
-            int itemIndex = 0;
-
-            struct MenuAction { float top; float bottom; int index; };
-            std::vector<MenuAction> actions;
-
-            // Rebuild layout to find click target
-            bool isSep[] = {false, false, false, false, true, false, true, false};
-            int totalItems = 8;
-            for (int i = 0; i < totalItems; i++) {
-                if (isSep[i]) {
-                    iy += 10;
-                } else {
-                    actions.push_back({iy, iy + itemH, i});
-                    iy += itemH;
-                }
-            }
-
-            for (auto& a : actions) {
-                if (y >= a.top && y < a.bottom) {
+            for (int i = 0; i < total; i++) {
+                if (isSep[i]) { iy += 10; continue; }
+                if (y >= iy && y < iy + itemH) {
                     fileMenuOpen = false;
-                    switch (a.index) {
+                    switch (i) {
                         case 0: newProject(); break;
                         case 1: openProject(); break;
                         case 2: saveProject(false); break;
@@ -558,15 +561,152 @@ bool ofApp::handleMenuClick(int x, int y) {
                     }
                     return true;
                 }
+                iy += itemH;
             }
         }
-
-        // Clicked outside dropdown → close it
         fileMenuOpen = false;
         return true;
     }
 
+    // View dropdown clicks
+    if (viewMenuOpen) {
+        float dropX = viewX - 5, dropW = 200;
+        float iy = menuBarHeight;
+        int brightValues[] = {60, 30, 10, 0};
+
+        if (x >= dropX && x <= dropX + dropW) {
+            for (int i = 0; i < 4; i++) {
+                if (y >= iy && y < iy + itemH) {
+                    bgBrightness = brightValues[i];
+                    viewMenuOpen = false;
+                    return true;
+                }
+                iy += itemH;
+            }
+        }
+        viewMenuOpen = false;
+        return true;
+    }
+
     return false;
+}
+
+// --- Context Menu (right-click on screens) ---
+
+void ofApp::drawContextMenu() {
+    float itemH = 24;
+    float dropW = 220;
+    float dropX = contextMenuPos.x;
+    float dropY = contextMenuPos.y;
+
+    // Build items: disconnect + available servers
+    std::vector<std::string> labels;
+    labels.push_back("Disconnect Source");
+
+    for (size_t i = 0; i < servers.size(); i++) {
+        std::string label = servers[i].displayName();
+        if (label.length() > 25) label = label.substr(0, 22) + "...";
+        labels.push_back(label);
+    }
+
+    if (servers.empty()) {
+        labels.push_back("(No servers available)");
+    }
+
+    // Separator after disconnect
+    float totalH = itemH + 10; // first item + separator
+    totalH += (labels.size() - 1) * itemH;
+
+    // Keep menu on screen
+    if (dropX + dropW > ofGetWidth()) dropX = ofGetWidth() - dropW;
+    if (dropY + totalH > ofGetHeight() - statusBarHeight) dropY = ofGetHeight() - statusBarHeight - totalH;
+
+    // Shadow + background
+    ofSetColor(0, 0, 0, 80);
+    ofDrawRectangle(dropX + 3, dropY + 3, dropW, totalH);
+    ofSetColor(50, 50, 50);
+    ofDrawRectangle(dropX, dropY, dropW, totalH);
+    ofSetColor(80);
+    ofNoFill();
+    ofDrawRectangle(dropX, dropY, dropW, totalH);
+    ofFill();
+
+    // Header
+    ofSetColor(150);
+    auto* screen = scene.getScreen(contextScreenIndex);
+    std::string header = screen ? screen->name : "Screen";
+    ofDrawBitmapString(header, dropX + 8, dropY - 5);
+
+    float iy = dropY;
+    for (size_t i = 0; i < labels.size(); i++) {
+        if (i == 1) {
+            // Separator after "Disconnect"
+            ofSetColor(80);
+            ofDrawLine(dropX + 8, iy + 5, dropX + dropW - 8, iy + 5);
+            iy += 10;
+        }
+
+        bool hover = (ofGetMouseX() >= dropX && ofGetMouseX() <= dropX + dropW &&
+                       ofGetMouseY() >= iy && ofGetMouseY() < iy + itemH);
+        if (hover) {
+            ofSetColor(0, 120, 200);
+            ofDrawRectangle(dropX + 1, iy, dropW - 2, itemH);
+        }
+
+        // Highlight currently assigned server
+        bool assigned = false;
+        if (screen && i > 0 && !servers.empty() && (int)(i - 1) == screen->sourceIndex) {
+            assigned = true;
+        }
+
+        ofSetColor(assigned ? ofColor(0, 220, 100) : (i == 0 ? ofColor(255, 120, 120) : ofColor(220)));
+        ofDrawBitmapString(labels[i], dropX + 22, iy + 17);
+        iy += itemH;
+    }
+
+    ofSetColor(255);
+}
+
+bool ofApp::handleContextMenuClick(int x, int y) {
+    if (!contextMenuOpen) return false;
+
+    float itemH = 24;
+    float dropW = 220;
+    float dropX = contextMenuPos.x;
+    float dropY = contextMenuPos.y;
+
+    if (dropX + dropW > ofGetWidth()) dropX = ofGetWidth() - dropW;
+
+    int serverCount = (int)servers.size();
+    int totalLabels = 1 + std::max(serverCount, 1); // disconnect + servers
+    float totalH = itemH + 10 + (totalLabels - 1) * itemH;
+
+    if (dropY + totalH > ofGetHeight() - statusBarHeight) dropY = ofGetHeight() - statusBarHeight - totalH;
+
+    if (x >= dropX && x <= dropX + dropW && y >= dropY && y <= dropY + totalH) {
+        float iy = dropY;
+        for (int i = 0; i < totalLabels; i++) {
+            if (i == 1) iy += 10; // separator
+            if (y >= iy && y < iy + itemH) {
+                if (i == 0) {
+                    // Disconnect
+                    auto* screen = scene.getScreen(contextScreenIndex);
+                    if (screen) screen->disconnectSource();
+                } else if (serverCount > 0) {
+                    // Assign server
+                    scene.assignSourceToScreen(contextScreenIndex, i - 1);
+                }
+                propertiesPanel.setTarget(scene.getScreen(contextScreenIndex));
+                contextMenuOpen = false;
+                return true;
+            }
+            iy += itemH;
+        }
+    }
+
+    // Clicked outside
+    contextMenuOpen = false;
+    return true;
 }
 
 // --- New Project ---
@@ -653,9 +793,11 @@ void ofApp::openProject() {
 }
 
 void ofApp::keyPressed(int key) {
-    // Close file menu on any key press
-    if (fileMenuOpen) {
+    // Close menus on any key press
+    if (fileMenuOpen || viewMenuOpen || contextMenuOpen) {
         fileMenuOpen = false;
+        viewMenuOpen = false;
+        contextMenuOpen = false;
         if (key == OF_KEY_ESC) return; // ESC just closes the menu
     }
 
@@ -1270,7 +1412,29 @@ void ofApp::drawMappingMode() {
 }
 
 void ofApp::mousePressed(int x, int y, int button) {
+    // Right-click: context menu on screens
+    if (button == OF_MOUSE_BUTTON_RIGHT) {
+        if (contextMenuOpen) {
+            contextMenuOpen = false;
+            return;
+        }
+        if (appMode == AppMode::Designer || appMode == AppMode::View) {
+            int hit = scene.pick(cam, glm::vec2(x, y));
+            if (hit >= 0) {
+                contextScreenIndex = hit;
+                scene.selectedIndex = hit;
+                propertiesPanel.setTarget(scene.getScreen(hit));
+                contextMenuPos = glm::vec2(x, y);
+                contextMenuOpen = true;
+            }
+        }
+        return;
+    }
+
     if (button != OF_MOUSE_BUTTON_LEFT) return;
+
+    // Context menu click
+    if (handleContextMenuClick(x, y)) return;
 
     // Menu bar always takes priority
     if (handleMenuClick(x, y)) return;
