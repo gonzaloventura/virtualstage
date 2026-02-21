@@ -291,11 +291,8 @@ void ofApp::keyPressed(int key) {
     // Cmd+S / Cmd+Shift+S / Cmd+O (project save/load) — Ctrl on Windows
 #ifdef TARGET_OSX
     if (ofGetKeyPressed(OF_KEY_SUPER)) {
-#else
-    if (ofGetKeyPressed(OF_KEY_CONTROL)) {
-#endif
         if (key == 's' || key == 'S') {
-            saveProject(ofGetKeyPressed(OF_KEY_SHIFT)); // Shift = Save As
+            saveProject(ofGetKeyPressed(OF_KEY_SHIFT));
             return;
         }
         if (key == 'o' || key == 'O') {
@@ -303,6 +300,26 @@ void ofApp::keyPressed(int key) {
             return;
         }
     }
+#else
+    {
+        // On Windows/GLFW, Ctrl+letter may arrive as a control character
+        // (Ctrl+S=19, Ctrl+O=15) instead of 's'/'S'. Check both approaches.
+        auto* win = dynamic_cast<ofAppGLFWWindow*>(ofGetWindowPtr());
+        GLFWwindow* gw = win ? win->getGLFWWindow() : nullptr;
+        bool ctrlHeld = ofGetKeyPressed(OF_KEY_CONTROL) ||
+            (gw && (glfwGetKey(gw, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+                    glfwGetKey(gw, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS));
+
+        if ((ctrlHeld && (key == 's' || key == 'S')) || key == 19) {
+            saveProject(ofGetKeyPressed(OF_KEY_SHIFT));
+            return;
+        }
+        if ((ctrlHeld && (key == 'o' || key == 'O')) || key == 15) {
+            openProject();
+            return;
+        }
+    }
+#endif
 
     // Tab toggles mode
     if (key == OF_KEY_TAB) {
