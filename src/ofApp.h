@@ -39,6 +39,12 @@ private:
     void drawStatusBar();
     void drawToolbar();
     void refreshServerList();
+    bool handleSidebarClick(int x, int y); // returns true if consumed
+    void mouseScrolled(int x, int y, float scrollX, float scrollY) override;
+
+    // Sidebar scroll
+    float sidebarScroll = 0;
+    float sidebarContentHeight = 0;
 
     // Menu bar
     float menuBarHeight = 25.0f;

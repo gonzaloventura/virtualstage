@@ -81,61 +81,239 @@ void ofApp::draw() {
 
 void ofApp::drawServerList() {
     float panelX = 0;
-    float panelY = 10;
+    float panelY = menuBarHeight;
     float panelH = ofGetHeight() - panelY - statusBarHeight;
+    float rowH = 22.0f;
+    float xBtnSize = 16.0f; // delete button size
 
+    // Panel background
     ofSetColor(20, 20, 20, 200);
     ofDrawRectangle(panelX, panelY, serverListWidth, panelH);
 
-    // Screens section first
+    // Calculate total content height for scroll
+    float contentH = 0;
+    contentH += 28; // SCREENS header
+    contentH += std::max(scene.getScreenCount(), 1) * rowH;
+    contentH += 28; // gap + SERVERS header
+    contentH += std::max((int)servers.size(), 1) * rowH;
+    contentH += 10; // bottom padding
+    sidebarContentHeight = contentH;
+
+    // Clamp scroll
+    float maxScroll = std::max(0.0f, contentH - panelH);
+    sidebarScroll = ofClamp(sidebarScroll, 0, maxScroll);
+
+    // Enable scissor to clip content to panel
+    glEnable(GL_SCISSOR_TEST);
+    glScissor((int)panelX, (int)(ofGetHeight() - panelY - panelH),
+              (int)serverListWidth, (int)panelH);
+
+    float curY = panelY - sidebarScroll;
+
+    // --- SCREENS header ---
     ofSetColor(200);
-    ofDrawBitmapString("SCREENS [A]dd [Del]ete", panelX + 10, panelY + 20);
-    float objY = panelY + 38;
+    ofDrawBitmapString("SCREENS  [A]dd", panelX + 10, curY + 18);
+    curY += 28;
+
+    // --- Screen rows ---
+    float mouseX = ofGetMouseX();
+    float mouseY = ofGetMouseY();
 
     for (int i = 0; i < scene.getScreenCount(); i++) {
         auto* screen = scene.getScreen(i);
         if (!screen) continue;
 
+        float rowTop = curY;
+        float rowBot = curY + rowH;
         bool selected = (scene.selectedIndex == i);
-        ofSetColor(selected ? ofColor(0, 200, 255) : ofColor(150));
+        bool hovered = (mouseX >= panelX && mouseX < serverListWidth &&
+                        mouseY >= rowTop && mouseY < rowBot &&
+                        mouseY >= panelY && mouseY < panelY + panelH);
 
+        // Row background on hover/selected
+        if (selected) {
+            ofSetColor(0, 120, 200, 60);
+            ofDrawRectangle(panelX, rowTop, serverListWidth, rowH);
+        } else if (hovered) {
+            ofSetColor(255, 255, 255, 20);
+            ofDrawRectangle(panelX, rowTop, serverListWidth, rowH);
+        }
+
+        // Screen name
+        ofSetColor(selected ? ofColor(0, 200, 255) : ofColor(180));
         std::string label = screen->name;
         if (screen->hasSource()) {
             label += " [" + screen->sourceName + "]";
         }
-        if (label.length() > 30) label = label.substr(0, 27) + "...";
-        ofDrawBitmapString(label, panelX + 10, objY + i * 18);
+        int maxChars = (int)((serverListWidth - 40) / 8); // 8px per char, leave room for X
+        if ((int)label.length() > maxChars) label = label.substr(0, maxChars - 3) + "...";
+        ofDrawBitmapString(label, panelX + 10, rowTop + 15);
+
+        // Delete [X] button
+        float xBtnX = serverListWidth - xBtnSize - 8;
+        float xBtnY = rowTop + (rowH - xBtnSize) / 2;
+        bool xHovered = (mouseX >= xBtnX && mouseX <= xBtnX + xBtnSize &&
+                         mouseY >= xBtnY && mouseY <= xBtnY + xBtnSize &&
+                         mouseY >= panelY && mouseY < panelY + panelH);
+
+        ofSetColor(xHovered ? ofColor(255, 80, 80) : ofColor(100));
+        ofNoFill();
+        ofDrawRectangle(xBtnX, xBtnY, xBtnSize, xBtnSize);
+        ofFill();
+        // Draw X
+        ofDrawLine(xBtnX + 4, xBtnY + 4, xBtnX + xBtnSize - 4, xBtnY + xBtnSize - 4);
+        ofDrawLine(xBtnX + xBtnSize - 4, xBtnY + 4, xBtnX + 4, xBtnY + xBtnSize - 4);
+
+        curY += rowH;
     }
 
-    // Servers section
-    float srvY = objY + std::max(scene.getScreenCount(), 1) * 18 + 20;
+    if (scene.getScreenCount() == 0) {
+        ofSetColor(100);
+        ofDrawBitmapString("No screens", panelX + 10, curY + 15);
+        curY += rowH;
+    }
+
+    // --- SERVERS header ---
+    curY += 8;
     ofSetColor(200);
-    ofDrawBitmapString("SERVERS (1-9 assign to sel.)", panelX + 10, srvY);
-    srvY += 18;
+    ofDrawBitmapString("SERVERS (click to assign)", panelX + 10, curY + 18);
+    curY += 28;
 
+    // --- Server rows ---
     for (size_t i = 0; i < servers.size(); i++) {
-        if (srvY > ofGetHeight() - statusBarHeight) break;
+        float rowTop = curY;
+        float rowBot = curY + rowH;
 
-        // Highlight if any selected screen uses this server
+        // Check if assigned to selected screen
         bool assigned = false;
         if (scene.selectedIndex >= 0) {
             auto* sel = scene.getScreen(scene.selectedIndex);
             if (sel && sel->sourceIndex == (int)i) assigned = true;
         }
 
-        ofSetColor(assigned ? ofColor(0, 200, 100) : ofColor(180));
+        bool hovered = (mouseX >= panelX && mouseX < serverListWidth &&
+                        mouseY >= rowTop && mouseY < rowBot &&
+                        mouseY >= panelY && mouseY < panelY + panelH);
 
+        if (assigned) {
+            ofSetColor(0, 200, 100, 40);
+            ofDrawRectangle(panelX, rowTop, serverListWidth, rowH);
+        } else if (hovered) {
+            ofSetColor(255, 255, 255, 20);
+            ofDrawRectangle(panelX, rowTop, serverListWidth, rowH);
+        }
+
+        ofSetColor(assigned ? ofColor(0, 220, 100) : ofColor(180));
         std::string label = ofToString(i + 1) + ". " + servers[i].displayName();
-        if (label.length() > 28) label = label.substr(0, 25) + "...";
-        ofDrawBitmapString(label, panelX + 10, srvY + i * 22);
+        int maxChars2 = (int)(serverListWidth - 20) / 8;
+        if ((int)label.length() > maxChars2) label = label.substr(0, maxChars2 - 3) + "...";
+        ofDrawBitmapString(label, panelX + 10, rowTop + 15);
+
+        curY += rowH;
     }
 
     if (servers.empty()) {
         ofSetColor(100);
-        ofDrawBitmapString("Waiting for servers...", panelX + 10, srvY);
+        ofDrawBitmapString("Waiting for servers...", panelX + 10, curY + 15);
+        curY += rowH;
+    }
+
+    glDisable(GL_SCISSOR_TEST);
+
+    // --- Scrollbar ---
+    if (contentH > panelH) {
+        float scrollbarH = std::max(20.0f, panelH * (panelH / contentH));
+        float scrollTrack = panelH - scrollbarH;
+        float scrollPos = (maxScroll > 0) ? (sidebarScroll / maxScroll) * scrollTrack : 0;
+
+        // Track
+        ofSetColor(40);
+        ofDrawRectangle(serverListWidth - 6, panelY, 6, panelH);
+
+        // Thumb
+        ofSetColor(100);
+        ofDrawRectangle(serverListWidth - 5, panelY + scrollPos, 4, scrollbarH);
     }
 
     ofSetColor(255);
+}
+
+bool ofApp::handleSidebarClick(int x, int y) {
+    if (x < 0 || x >= serverListWidth) return false;
+
+    float panelY = menuBarHeight;
+    float panelH = ofGetHeight() - panelY - statusBarHeight;
+    if (y < panelY || y >= panelY + panelH) return false;
+
+    float rowH = 22.0f;
+    float xBtnSize = 16.0f;
+
+    // Convert click Y to content Y (account for scroll)
+    float curY = panelY - sidebarScroll;
+    curY += 28; // skip SCREENS header
+
+    // --- Screen rows ---
+    for (int i = 0; i < scene.getScreenCount(); i++) {
+        float rowTop = curY;
+        float rowBot = curY + rowH;
+
+        if (y >= rowTop && y < rowBot) {
+            // Check if X delete button was clicked
+            float xBtnX = serverListWidth - xBtnSize - 8;
+            float xBtnY = rowTop + (rowH - xBtnSize) / 2;
+            if (x >= xBtnX && x <= xBtnX + xBtnSize &&
+                y >= xBtnY && y <= xBtnY + xBtnSize) {
+                scene.removeScreen(i);
+                if (scene.selectedIndex < 0 || scene.selectedIndex >= scene.getScreenCount()) {
+                    scene.selectedIndex = -1;
+                    propertiesPanel.setTarget(nullptr);
+                } else {
+                    propertiesPanel.setTarget(scene.getScreen(scene.selectedIndex));
+                }
+                return true;
+            }
+
+            // Click on row → select screen
+            scene.selectedIndex = i;
+            propertiesPanel.setTarget(scene.getScreen(i));
+            return true;
+        }
+        curY += rowH;
+    }
+
+    if (scene.getScreenCount() == 0) curY += rowH;
+
+    // Gap + SERVERS header
+    curY += 8 + 28;
+
+    // --- Server rows ---
+    for (size_t i = 0; i < servers.size(); i++) {
+        float rowTop = curY;
+        float rowBot = curY + rowH;
+
+        if (y >= rowTop && y < rowBot) {
+            // Click on server → assign to selected screen
+            if (scene.selectedIndex >= 0) {
+                scene.assignSourceToScreen(scene.selectedIndex, (int)i);
+                propertiesPanel.setTarget(scene.getScreen(scene.selectedIndex));
+            }
+            return true;
+        }
+        curY += rowH;
+    }
+
+    return true; // consumed (clicked inside panel)
+}
+
+void ofApp::mouseScrolled(int x, int y, float scrollX, float scrollY) {
+    // Scroll sidebar when mouse is over it
+    if (x >= 0 && x < serverListWidth &&
+        y >= menuBarHeight && y < ofGetHeight() - statusBarHeight) {
+        sidebarScroll -= scrollY * 20.0f;
+        float panelH = ofGetHeight() - menuBarHeight - statusBarHeight;
+        float maxScroll = std::max(0.0f, sidebarContentHeight - panelH);
+        sidebarScroll = ofClamp(sidebarScroll, 0, maxScroll);
+    }
 }
 
 void ofApp::drawStatusBar() {
@@ -1143,8 +1321,8 @@ void ofApp::mousePressed(int x, int y, int button) {
     // View mode: no interaction
     if (appMode == AppMode::View) return;
 
-    // Check if click is on server list area
-    if (showUI && x < serverListWidth) {
+    // Sidebar click handling (select screen, delete, assign server)
+    if (showUI && handleSidebarClick(x, y)) {
         return;
     }
 
