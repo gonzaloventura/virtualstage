@@ -28,6 +28,9 @@ void ofApp::update() {
     // Refresh server list periodically
     servers = scene.getAvailableServers();
 
+    // Update background from ambient light slider (0-100 → 0-60)
+    bgBrightness = (int)(propertiesPanel.getAmbientLight() * 0.6f);
+
     // Autosave
     if (autosaveEnabled && !currentProjectPath.empty()) {
         autosaveTimer += ofGetLastFrameTime();
@@ -563,10 +566,12 @@ void ofApp::drawMenuBar() {
     // View dropdown
     if (viewMenuOpen) {
         std::vector<std::tuple<std::string, std::string, bool, bool, bool>> items = {
-            {"Background: Light",   "", false, true, bgBrightness == 60},
-            {"Background: Default", "", false, true, bgBrightness == 30},
-            {"Background: Dark",    "", false, true, bgBrightness == 10},
-            {"Background: Black",   "", false, true, bgBrightness == 0},
+            {"Ambient Light", "", false, true, showAmbientLight},
+            {"",              "", true,  false, false},
+            {"Position",      "", false, true, showPosition},
+            {"Rotation",      "", false, true, showRotation},
+            {"Scale",         "", false, true, showScale},
+            {"Input Mapping", "", false, true, showCrop},
         };
         drawDropdown(viewX - 5, menuBarHeight, 200, items);
     }
@@ -627,14 +632,38 @@ bool ofApp::handleMenuClick(int x, int y) {
     // View dropdown clicks
     if (viewMenuOpen) {
         float dropX = viewX - 5, dropW = 200;
+        // items: AmbientLight, sep, Position, Rotation, Scale, InputMapping
+        bool isSepV[] = {false, true, false, false, false, false};
+        int totalV = 6;
         float iy = menuBarHeight;
-        int brightValues[] = {60, 30, 10, 0};
 
         if (x >= dropX && x <= dropX + dropW) {
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < totalV; i++) {
+                if (isSepV[i]) { iy += 10; continue; }
                 if (y >= iy && y < iy + itemH) {
-                    bgBrightness = brightValues[i];
                     viewMenuOpen = false;
+                    switch (i) {
+                        case 0:
+                            showAmbientLight = !showAmbientLight;
+                            propertiesPanel.setGroupVisible("Ambient Light", showAmbientLight);
+                            break;
+                        case 2:
+                            showPosition = !showPosition;
+                            propertiesPanel.setGroupVisible("Position", showPosition);
+                            break;
+                        case 3:
+                            showRotation = !showRotation;
+                            propertiesPanel.setGroupVisible("Rotation", showRotation);
+                            break;
+                        case 4:
+                            showScale = !showScale;
+                            propertiesPanel.setGroupVisible("Scale", showScale);
+                            break;
+                        case 5:
+                            showCrop = !showCrop;
+                            propertiesPanel.setGroupVisible("Input Mapping (M to edit)", showCrop);
+                            break;
+                    }
                     return true;
                 }
                 iy += itemH;

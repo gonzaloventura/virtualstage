@@ -2,6 +2,9 @@
 #include "PropertiesPanel.h"
 
 void PropertiesPanel::setup(float x, float y) {
+    ambientGroup.setName("Ambient Light");
+    ambientGroup.add(ambientLight);
+
     posGroup.setName("Position");
     posGroup.add(posX);
     posGroup.add(posY);
@@ -28,11 +31,15 @@ void PropertiesPanel::setup(float x, float y) {
     panel.setup("Properties", "properties.xml", x, y);
     panel.add(nameLabel.setup("Object", "None"));
     panel.add(sourceLabel.setup("Source", "None"));
+    panel.add(ambientGroup);
     panel.add(posGroup);
     panel.add(rotGroup);
     panel.add(scaleGroup);
     panel.add(curvatureGroup);
     panel.add(cropGroup);
+
+    // Start with ambient light hidden (user enables via View menu)
+    panel.getGroup("Ambient Light").minimize();
 
     // Add listeners
     posX.addListener(this, &PropertiesPanel::onParamChanged);
@@ -112,4 +119,13 @@ void PropertiesPanel::syncToTarget() {
 
 void PropertiesPanel::onParamChanged(float& val) {
     syncToTarget();
+}
+
+void PropertiesPanel::setGroupVisible(const std::string& name, bool show) {
+    auto& group = panel.getGroup(name);
+    if (show) {
+        group.maximize();
+    } else {
+        group.minimize();
+    }
 }

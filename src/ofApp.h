@@ -53,8 +53,15 @@ private:
     void drawMenuBar();
     bool handleMenuClick(int x, int y); // returns true if click was consumed
 
-    // Background brightness (0=black, 30=default, 60=light)
-    int bgBrightness = 30;
+    // Background brightness (driven by ambient light slider, default=lightest)
+    int bgBrightness = 60;
+
+    // View menu toggle states
+    bool showAmbientLight = false;
+    bool showPosition = true;
+    bool showRotation = true;
+    bool showScale = true;
+    bool showCrop = true;
 
     // Camera lock (View mode)
     bool cameraLocked = false;

@@ -16,8 +16,17 @@ public:
     bool isVisible() const { return visible; }
     void setVisible(bool v) { visible = v; }
 
+    // Group visibility (minimize/maximize)
+    void setGroupVisible(const std::string& name, bool show);
+
+    // Ambient light (0-100, 100=brightest)
+    float getAmbientLight() const { return ambientLight; }
+
 private:
     ofxPanel panel;
+
+    ofParameter<float> ambientLight{"Ambient", 100, 0, 100};
+    ofParameterGroup ambientGroup;
 
     ofParameter<float> posX{"X", 0, -2000, 2000};
     ofParameter<float> posY{"Y", 0, -2000, 2000};
