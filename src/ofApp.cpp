@@ -4,6 +4,7 @@
 #include "ofXml.h"
 
 void ofApp::setup() {
+    ofSetEscapeQuitsApp(false);
     ofSetFrameRate(60);
     ofSetVerticalSync(true);
     ofBackground(30);
@@ -27,12 +28,22 @@ void ofApp::update() {
     scene.update();
     // Refresh server list periodically
     servers = scene.getAvailableServers();
+
+    // Autosave
+    if (autosaveEnabled && !currentProjectPath.empty()) {
+        autosaveTimer += ofGetLastFrameTime();
+        if (autosaveTimer >= autosaveInterval) {
+            autosaveTimer = 0;
+            saveProject(false);
+        }
+    }
 }
 
 void ofApp::draw() {
     // --- Mapping mode: full-screen 2D editor ---
     if (mappingMode) {
         drawMappingMode();
+        drawMenuBar();
         return;
     }
 
@@ -64,6 +75,7 @@ void ofApp::draw() {
         drawToolbar();
     }
 
+    drawMenuBar();
     drawStatusBar();
 }
 
@@ -207,6 +219,199 @@ void ofApp::refreshServerList() {
     servers = scene.getAvailableServers();
 }
 
+// --- Menu Bar ---
+
+void ofApp::drawMenuBar() {
+    float barW = ofGetWidth();
+
+    // Bar background
+    ofSetColor(45, 45, 45);
+    ofDrawRectangle(0, 0, barW, menuBarHeight);
+
+    // "File" button
+    float fileX = 10;
+    float fileW = 50;
+    bool hovered = (ofGetMouseX() >= fileX && ofGetMouseX() <= fileX + fileW &&
+                    ofGetMouseY() >= 0 && ofGetMouseY() <= menuBarHeight);
+
+    if (fileMenuOpen || hovered) {
+        ofSetColor(70, 70, 70);
+        ofDrawRectangle(fileX - 5, 0, fileW + 10, menuBarHeight);
+    }
+    ofSetColor(220);
+    ofDrawBitmapString("File", fileX + 5, menuBarHeight - 7);
+
+    // Autosave indicator
+    if (autosaveEnabled) {
+        ofSetColor(100, 200, 100);
+        ofDrawBitmapString("[Autosave ON]", fileX + fileW + 20, menuBarHeight - 7);
+    }
+
+    // Dropdown
+    if (fileMenuOpen) {
+        float dropX = fileX - 5;
+        float dropY = menuBarHeight;
+        float dropW = 220;
+        float itemH = 24;
+
+        struct MenuItem {
+            std::string label;
+            std::string shortcut;
+            bool separator;
+            bool toggle;
+            bool toggleState;
+        };
+        std::vector<MenuItem> items = {
+            {"New Project",     "",           false, false, false},
+            {"Open Project",    "Ctrl+O",     false, false, false},
+            {"Save Project",    "Ctrl+S",     false, false, false},
+            {"Save Project As", "Ctrl+Shift+S", false, false, false},
+            {"",                "",           true,  false, false},
+            {"Autosave (15s)",  "",           false, true,  autosaveEnabled},
+            {"",                "",           true,  false, false},
+            {"Quit",            "",           false, false, false},
+        };
+
+        float dropH = 0;
+        for (auto& it : items) dropH += it.separator ? 10 : itemH;
+
+        // Shadow
+        ofSetColor(0, 0, 0, 80);
+        ofDrawRectangle(dropX + 3, dropY + 3, dropW, dropH);
+
+        // Background
+        ofSetColor(50, 50, 50);
+        ofDrawRectangle(dropX, dropY, dropW, dropH);
+
+        // Border
+        ofSetColor(80);
+        ofNoFill();
+        ofDrawRectangle(dropX, dropY, dropW, dropH);
+        ofFill();
+
+        // Items
+        float iy = dropY;
+        for (auto& it : items) {
+            if (it.separator) {
+                ofSetColor(80);
+                ofDrawLine(dropX + 8, iy + 5, dropX + dropW - 8, iy + 5);
+                iy += 10;
+                continue;
+            }
+
+            // Hover highlight
+            if (ofGetMouseX() >= dropX && ofGetMouseX() <= dropX + dropW &&
+                ofGetMouseY() >= iy && ofGetMouseY() < iy + itemH) {
+                ofSetColor(0, 120, 200);
+                ofDrawRectangle(dropX + 1, iy, dropW - 2, itemH);
+            }
+
+            // Toggle check mark
+            if (it.toggle && it.toggleState) {
+                ofSetColor(100, 220, 100);
+                ofDrawBitmapString("*", dropX + 8, iy + 17);
+            }
+
+            ofSetColor(220);
+            ofDrawBitmapString(it.label, dropX + 22, iy + 17);
+
+            // Shortcut text (right-aligned)
+            if (!it.shortcut.empty()) {
+                ofSetColor(130);
+                float sw = it.shortcut.length() * 8;
+                ofDrawBitmapString(it.shortcut, dropX + dropW - sw - 10, iy + 17);
+            }
+
+            iy += itemH;
+        }
+    }
+
+    ofSetColor(255);
+}
+
+bool ofApp::handleMenuClick(int x, int y) {
+    float fileX = 10;
+    float fileW = 50;
+
+    // Click on "File" button
+    if (x >= fileX - 5 && x <= fileX + fileW + 5 && y >= 0 && y <= menuBarHeight) {
+        fileMenuOpen = !fileMenuOpen;
+        return true;
+    }
+
+    // Click on dropdown items
+    if (fileMenuOpen) {
+        float dropX = fileX - 5;
+        float dropY = menuBarHeight;
+        float dropW = 220;
+        float itemH = 24;
+
+        if (x >= dropX && x <= dropX + dropW) {
+            // Determine which item was clicked
+            int separators[] = {4, 6}; // indices of separator items
+            float iy = dropY;
+            int itemIndex = 0;
+
+            struct MenuAction { float top; float bottom; int index; };
+            std::vector<MenuAction> actions;
+
+            // Rebuild layout to find click target
+            bool isSep[] = {false, false, false, false, true, false, true, false};
+            int totalItems = 8;
+            for (int i = 0; i < totalItems; i++) {
+                if (isSep[i]) {
+                    iy += 10;
+                } else {
+                    actions.push_back({iy, iy + itemH, i});
+                    iy += itemH;
+                }
+            }
+
+            for (auto& a : actions) {
+                if (y >= a.top && y < a.bottom) {
+                    fileMenuOpen = false;
+                    switch (a.index) {
+                        case 0: newProject(); break;
+                        case 1: openProject(); break;
+                        case 2: saveProject(false); break;
+                        case 3: saveProject(true); break;
+                        case 5: autosaveEnabled = !autosaveEnabled; autosaveTimer = 0; break;
+                        case 7: ofExit(); break;
+                    }
+                    return true;
+                }
+            }
+        }
+
+        // Clicked outside dropdown → close it
+        fileMenuOpen = false;
+        return true;
+    }
+
+    return false;
+}
+
+// --- New Project ---
+
+void ofApp::newProject() {
+    // Clear all screens and reset state
+    while (scene.getScreenCount() > 0) {
+        scene.removeScreen(0);
+    }
+    scene.selectedIndex = -1;
+    propertiesPanel.setTarget(nullptr);
+    currentProjectPath = "";
+
+    // Add a default screen
+    scene.addScreen("Screen 1");
+
+    // Reset camera
+    cam.setDistance(800);
+    cam.setTarget(glm::vec3(0, 100, 0));
+
+    ofLogNotice("ofApp") << "New project created";
+}
+
 // --- Project Save/Load ---
 
 void ofApp::saveProject(bool saveAs) {
@@ -270,6 +475,12 @@ void ofApp::openProject() {
 }
 
 void ofApp::keyPressed(int key) {
+    // Close file menu on any key press
+    if (fileMenuOpen) {
+        fileMenuOpen = false;
+        if (key == OF_KEY_ESC) return; // ESC just closes the menu
+    }
+
     // --- Mapping mode keys ---
     if (mappingMode) {
         if (key == 'm' || key == 'M' || key == OF_KEY_ESC) {
@@ -882,6 +1093,9 @@ void ofApp::drawMappingMode() {
 
 void ofApp::mousePressed(int x, int y, int button) {
     if (button != OF_MOUSE_BUTTON_LEFT) return;
+
+    // Menu bar always takes priority
+    if (handleMenuClick(x, y)) return;
 
     // --- Mapping mode mouse ---
     if (mappingMode) {

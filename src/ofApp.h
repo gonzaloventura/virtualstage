@@ -40,6 +40,12 @@ private:
     void drawToolbar();
     void refreshServerList();
 
+    // Menu bar
+    float menuBarHeight = 25.0f;
+    bool fileMenuOpen = false;
+    void drawMenuBar();
+    bool handleMenuClick(int x, int y); // returns true if click was consumed
+
     // Layout
     float statusBarHeight = 30.0f;
     float serverListWidth = 250.0f;
@@ -51,6 +57,12 @@ private:
     std::string currentProjectPath;
     void saveProject(bool saveAs = false);
     void openProject();
+    void newProject();
+
+    // Autosave
+    bool autosaveEnabled = false;
+    float autosaveInterval = 15.0f;
+    float autosaveTimer = 0.0f;
 
     // Resolume XML import
     enum class LinkState { None, Confirm, ChooseRect };
