@@ -593,54 +593,88 @@ bool ofApp::handleMenuClick(int x, int y) {
 
 // --- Context Menu (right-click on screens) ---
 
+// Context menu item IDs
+enum CtxAction { CTX_MAP = -1, CTX_DUPLICATE = -2, CTX_DISCONNECT = -3, CTX_NONE = -99 };
+
+struct CtxItem {
+    std::string label;
+    int action;       // CTX_* or server index (>=0)
+    bool separator;   // draw separator BEFORE this item
+    ofColor color;
+};
+
+static std::vector<CtxItem> buildContextItems(ScreenObject* screen,
+                                               const std::vector<ServerInfo>& servers) {
+    std::vector<CtxItem> items;
+
+    // Actions section
+    if (screen && screen->hasSource()) {
+        items.push_back({"Map",          CTX_MAP,        false, ofColor(0, 200, 255)});
+    }
+    items.push_back({"Duplicate",    CTX_DUPLICATE,  false, ofColor(220)});
+    items.push_back({"Disconnect",   CTX_DISCONNECT, false, ofColor(255, 120, 120)});
+
+    // Servers section
+    bool first = true;
+    for (int i = 0; i < (int)servers.size(); i++) {
+        std::string label = servers[i].displayName();
+        if (label.length() > 24) label = label.substr(0, 21) + "...";
+        bool assigned = (screen && screen->sourceIndex == i);
+        items.push_back({label, i, first, assigned ? ofColor(0, 220, 100) : ofColor(220)});
+        first = false;
+    }
+    if (servers.empty()) {
+        items.push_back({"(No servers)", CTX_NONE, true, ofColor(100)});
+    }
+
+    return items;
+}
+
 void ofApp::drawContextMenu() {
     float itemH = 24;
-    float dropW = 220;
+    float dropW = 230;
     float dropX = contextMenuPos.x;
     float dropY = contextMenuPos.y;
 
-    // Build items: disconnect + available servers
-    std::vector<std::string> labels;
-    labels.push_back("Disconnect Source");
+    auto* screen = scene.getScreen(contextScreenIndex);
+    auto items = buildContextItems(screen, servers);
 
-    for (size_t i = 0; i < servers.size(); i++) {
-        std::string label = servers[i].displayName();
-        if (label.length() > 25) label = label.substr(0, 22) + "...";
-        labels.push_back(label);
+    // Calculate total height: header band + items + separators
+    float headerH = 26;
+    float totalH = headerH;
+    for (auto& it : items) {
+        if (it.separator) totalH += 10;
+        totalH += itemH;
     }
 
-    if (servers.empty()) {
-        labels.push_back("(No servers available)");
-    }
-
-    // Separator after disconnect
-    float totalH = itemH + 10; // first item + separator
-    totalH += (labels.size() - 1) * itemH;
-
-    // Keep menu on screen
+    // Keep on screen
     if (dropX + dropW > ofGetWidth()) dropX = ofGetWidth() - dropW;
     if (dropY + totalH > ofGetHeight() - statusBarHeight) dropY = ofGetHeight() - statusBarHeight - totalH;
 
     // Shadow + background
-    ofSetColor(0, 0, 0, 80);
+    ofSetColor(0, 0, 0, 100);
     ofDrawRectangle(dropX + 3, dropY + 3, dropW, totalH);
     ofSetColor(50, 50, 50);
     ofDrawRectangle(dropX, dropY, dropW, totalH);
+
+    // Header band with screen name
+    ofSetColor(35, 35, 35);
+    ofDrawRectangle(dropX, dropY, dropW, headerH);
+    ofSetColor(255);
+    std::string header = screen ? screen->name : "Screen";
+    if (header.length() > 26) header = header.substr(0, 23) + "...";
+    ofDrawBitmapString(header, dropX + 10, dropY + 18);
+
+    // Border
     ofSetColor(80);
     ofNoFill();
     ofDrawRectangle(dropX, dropY, dropW, totalH);
     ofFill();
 
-    // Header
-    ofSetColor(150);
-    auto* screen = scene.getScreen(contextScreenIndex);
-    std::string header = screen ? screen->name : "Screen";
-    ofDrawBitmapString(header, dropX + 8, dropY - 5);
-
-    float iy = dropY;
-    for (size_t i = 0; i < labels.size(); i++) {
-        if (i == 1) {
-            // Separator after "Disconnect"
+    // Items
+    float iy = dropY + headerH;
+    for (auto& it : items) {
+        if (it.separator) {
             ofSetColor(80);
             ofDrawLine(dropX + 8, iy + 5, dropX + dropW - 8, iy + 5);
             iy += 10;
@@ -648,19 +682,13 @@ void ofApp::drawContextMenu() {
 
         bool hover = (ofGetMouseX() >= dropX && ofGetMouseX() <= dropX + dropW &&
                        ofGetMouseY() >= iy && ofGetMouseY() < iy + itemH);
-        if (hover) {
+        if (hover && it.action != CTX_NONE) {
             ofSetColor(0, 120, 200);
             ofDrawRectangle(dropX + 1, iy, dropW - 2, itemH);
         }
 
-        // Highlight currently assigned server
-        bool assigned = false;
-        if (screen && i > 0 && !servers.empty() && (int)(i - 1) == screen->sourceIndex) {
-            assigned = true;
-        }
-
-        ofSetColor(assigned ? ofColor(0, 220, 100) : (i == 0 ? ofColor(255, 120, 120) : ofColor(220)));
-        ofDrawBitmapString(labels[i], dropX + 22, iy + 17);
+        ofSetColor(it.color);
+        ofDrawBitmapString(it.label, dropX + 22, iy + 17);
         iy += itemH;
     }
 
@@ -671,33 +699,86 @@ bool ofApp::handleContextMenuClick(int x, int y) {
     if (!contextMenuOpen) return false;
 
     float itemH = 24;
-    float dropW = 220;
+    float dropW = 230;
     float dropX = contextMenuPos.x;
     float dropY = contextMenuPos.y;
 
     if (dropX + dropW > ofGetWidth()) dropX = ofGetWidth() - dropW;
 
-    int serverCount = (int)servers.size();
-    int totalLabels = 1 + std::max(serverCount, 1); // disconnect + servers
-    float totalH = itemH + 10 + (totalLabels - 1) * itemH;
+    auto* screen = scene.getScreen(contextScreenIndex);
+    auto items = buildContextItems(screen, servers);
 
+    float headerH = 26;
+    float totalH = headerH;
+    for (auto& it : items) {
+        if (it.separator) totalH += 10;
+        totalH += itemH;
+    }
     if (dropY + totalH > ofGetHeight() - statusBarHeight) dropY = ofGetHeight() - statusBarHeight - totalH;
 
+    // Check if inside menu area
     if (x >= dropX && x <= dropX + dropW && y >= dropY && y <= dropY + totalH) {
-        float iy = dropY;
-        for (int i = 0; i < totalLabels; i++) {
-            if (i == 1) iy += 10; // separator
-            if (y >= iy && y < iy + itemH) {
-                if (i == 0) {
-                    // Disconnect
-                    auto* screen = scene.getScreen(contextScreenIndex);
-                    if (screen) screen->disconnectSource();
-                } else if (serverCount > 0) {
-                    // Assign server
-                    scene.assignSourceToScreen(contextScreenIndex, i - 1);
-                }
-                propertiesPanel.setTarget(scene.getScreen(contextScreenIndex));
+        float iy = dropY + headerH;
+        for (auto& it : items) {
+            if (it.separator) iy += 10;
+            if (y >= iy && y < iy + itemH && it.action != CTX_NONE) {
                 contextMenuOpen = false;
+                switch (it.action) {
+                    case CTX_MAP:
+                        // Open mapping mode for this screen
+                        scene.selectedIndex = contextScreenIndex;
+                        propertiesPanel.setTarget(scene.getScreen(contextScreenIndex));
+                        mappingMode = true;
+                        cam.disableMouseInput();
+                        break;
+                    case CTX_DUPLICATE: {
+                        // Duplicate screen via JSON round-trip
+                        if (screen) {
+                            ofJson j = screen->toJson();
+                            auto dup = std::make_unique<ScreenObject>();
+                            dup->fromJson(j);
+                            dup->name = screen->name + " Copy";
+                            // Offset position slightly
+                            glm::vec3 pos = dup->getPosition();
+                            pos.x += 50;
+                            pos.y -= 50;
+                            dup->setPosition(pos);
+                            // Reconnect source if any
+                            if (!dup->sourceName.empty()) {
+                                scene.screens.push_back(std::move(dup));
+                                int newIdx = (int)scene.screens.size() - 1;
+                                // Try to reconnect by finding source index
+                                auto srvs = scene.getAvailableServers();
+                                for (int si = 0; si < (int)srvs.size(); si++) {
+                                    if (srvs[si].displayName() == scene.screens[newIdx]->sourceName
+                                        || srvs[si].serverName == scene.screens[newIdx]->sourceName) {
+                                        scene.assignSourceToScreen(newIdx, si);
+                                        break;
+                                    }
+                                }
+                                scene.selectedIndex = newIdx;
+                                propertiesPanel.setTarget(scene.getScreen(newIdx));
+                            } else {
+                                scene.screens.push_back(std::move(dup));
+                                int newIdx = (int)scene.screens.size() - 1;
+                                scene.selectedIndex = newIdx;
+                                propertiesPanel.setTarget(scene.getScreen(newIdx));
+                            }
+                        }
+                        break;
+                    }
+                    case CTX_DISCONNECT:
+                        if (screen) screen->disconnectSource();
+                        propertiesPanel.setTarget(screen);
+                        break;
+                    default:
+                        // Assign server (action = server index)
+                        if (it.action >= 0) {
+                            scene.assignSourceToScreen(contextScreenIndex, it.action);
+                            propertiesPanel.setTarget(scene.getScreen(contextScreenIndex));
+                        }
+                        break;
+                }
                 return true;
             }
             iy += itemH;

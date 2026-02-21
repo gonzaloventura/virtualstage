@@ -62,8 +62,9 @@ public:
     // Callback when server list changes
     std::function<void()> onServerListChanged;
 
-private:
     std::vector<std::unique_ptr<ScreenObject>> screens;
+
+private:
     ofLight light;
     int nextScreenId = 1;
 
