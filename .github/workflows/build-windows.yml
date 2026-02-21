@@ -101,7 +101,7 @@ jobs:
             'include $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk' \
             > "${PROJECT}/Makefile"
 
-      - name: Create missing pkg-config files
+      - name: Create missing pkg-config files and fix boost lib names
         run: |
           GLM_VER=$(pacman -Q mingw-w64-x86_64-glm | awk '{print $2}' | cut -d- -f1)
           cat > /mingw64/lib/pkgconfig/glm.pc << PCEOF
@@ -114,6 +114,23 @@ jobs:
           Cflags: -I\${includedir} -DGLM_ENABLE_EXPERIMENTAL
           PCEOF
           echo "Created glm.pc (version ${GLM_VER})"
+
+          # oF links -lboost_*-mt but MSYS2 boost ships without -mt suffix
+          # and boost_system is header-only (no library file). Create symlinks.
+          for lib in /mingw64/lib/libboost_*.dll.a; do
+            mt="${lib%.dll.a}-mt.dll.a"
+            [ ! -f "$mt" ] && ln -sf "$lib" "$mt" && echo "symlink: $mt"
+          done
+          for lib in /mingw64/lib/libboost_*.a; do
+            [[ "$lib" == *".dll.a" ]] && continue
+            mt="${lib%.a}-mt.a"
+            [ ! -f "$mt" ] && ln -sf "$lib" "$mt" && echo "symlink: $mt"
+          done
+          # boost_system is header-only in modern boost; create empty archive
+          if [ ! -f /mingw64/lib/libboost_system-mt.a ]; then
+            ar rcs /mingw64/lib/libboost_system-mt.a
+            echo "Created empty libboost_system-mt.a"
+          fi
 
       - name: Build
         run: |
