@@ -16,16 +16,17 @@ public:
     bool isVisible() const { return visible; }
     void setVisible(bool v) { visible = v; }
 
-    // Group visibility (minimize/maximize)
-    void setGroupVisible(const std::string& name, bool show);
+    // Group visibility (completely show/hide groups from panel)
+    void updateGroupVisibility(bool ambient, bool pos, bool rot, bool scale, bool crop);
 
-    // Ambient light (0-100, 100=brightest)
+    // Ambient light (0-100, default 60)
     float getAmbientLight() const { return ambientLight; }
 
 private:
     ofxPanel panel;
 
-    ofParameter<float> ambientLight{"Ambient", 100, 0, 100};
+    ofParameter<float> ambientLight{"Ambient", 60, 0, 100};
+    ofParameter<bool> ambientReset{"Reset to 60", false};
     ofParameterGroup ambientGroup;
 
     ofParameter<float> posX{"X", 0, -2000, 2000};
@@ -56,5 +57,14 @@ private:
     bool visible = true;
     bool syncing = false;
 
+    // Group visibility flags
+    bool visAmbient = false;
+    bool visPos = true;
+    bool visRot = true;
+    bool visScale = true;
+    bool visCrop = true;
+
+    void rebuildPanel();
     void onParamChanged(float& val);
+    void onAmbientReset(bool& val);
 };

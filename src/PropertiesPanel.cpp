@@ -4,6 +4,7 @@
 void PropertiesPanel::setup(float x, float y) {
     ambientGroup.setName("Ambient Light");
     ambientGroup.add(ambientLight);
+    ambientGroup.add(ambientReset);
 
     posGroup.setName("Position");
     posGroup.add(posX);
@@ -29,17 +30,7 @@ void PropertiesPanel::setup(float x, float y) {
     cropGroup.add(cropH);
 
     panel.setup("Properties", "properties.xml", x, y);
-    panel.add(nameLabel.setup("Object", "None"));
-    panel.add(sourceLabel.setup("Source", "None"));
-    panel.add(ambientGroup);
-    panel.add(posGroup);
-    panel.add(rotGroup);
-    panel.add(scaleGroup);
-    panel.add(curvatureGroup);
-    panel.add(cropGroup);
-
-    // Start with ambient light hidden (user enables via View menu)
-    panel.getGroup("Ambient Light").minimize();
+    rebuildPanel();
 
     // Add listeners
     posX.addListener(this, &PropertiesPanel::onParamChanged);
@@ -55,6 +46,32 @@ void PropertiesPanel::setup(float x, float y) {
     cropY.addListener(this, &PropertiesPanel::onParamChanged);
     cropW.addListener(this, &PropertiesPanel::onParamChanged);
     cropH.addListener(this, &PropertiesPanel::onParamChanged);
+    ambientReset.addListener(this, &PropertiesPanel::onAmbientReset);
+}
+
+void PropertiesPanel::rebuildPanel() {
+    float x = panel.getPosition().x;
+    float y = panel.getPosition().y;
+    panel.clear();
+    panel.add(nameLabel.setup("Object", target ? target->name : "None"));
+    panel.add(sourceLabel.setup("Source",
+        (target && target->hasSource()) ? target->sourceName : "None (1-9 to assign)"));
+    if (visAmbient) panel.add(ambientGroup);
+    if (visPos) panel.add(posGroup);
+    if (visRot) panel.add(rotGroup);
+    if (visScale) panel.add(scaleGroup);
+    panel.add(curvatureGroup);
+    if (visCrop) panel.add(cropGroup);
+    panel.setPosition(x, y);
+}
+
+void PropertiesPanel::updateGroupVisibility(bool ambient, bool pos, bool rot, bool scale, bool crop) {
+    visAmbient = ambient;
+    visPos = pos;
+    visRot = rot;
+    visScale = scale;
+    visCrop = crop;
+    rebuildPanel();
 }
 
 void PropertiesPanel::setPosition(float x, float y) {
@@ -121,11 +138,12 @@ void PropertiesPanel::onParamChanged(float& val) {
     syncToTarget();
 }
 
-void PropertiesPanel::setGroupVisible(const std::string& name, bool show) {
-    auto& group = panel.getGroup(name);
-    if (show) {
-        group.maximize();
-    } else {
-        group.minimize();
+void PropertiesPanel::onAmbientReset(bool& val) {
+    if (syncing) return;
+    if (val) {
+        syncing = true;
+        ambientLight = 60;
+        ambientReset = false;
+        syncing = false;
     }
 }

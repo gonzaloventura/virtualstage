@@ -643,27 +643,14 @@ bool ofApp::handleMenuClick(int x, int y) {
                 if (y >= iy && y < iy + itemH) {
                     viewMenuOpen = false;
                     switch (i) {
-                        case 0:
-                            showAmbientLight = !showAmbientLight;
-                            propertiesPanel.setGroupVisible("Ambient Light", showAmbientLight);
-                            break;
-                        case 2:
-                            showPosition = !showPosition;
-                            propertiesPanel.setGroupVisible("Position", showPosition);
-                            break;
-                        case 3:
-                            showRotation = !showRotation;
-                            propertiesPanel.setGroupVisible("Rotation", showRotation);
-                            break;
-                        case 4:
-                            showScale = !showScale;
-                            propertiesPanel.setGroupVisible("Scale", showScale);
-                            break;
-                        case 5:
-                            showCrop = !showCrop;
-                            propertiesPanel.setGroupVisible("Input Mapping (M to edit)", showCrop);
-                            break;
+                        case 0: showAmbientLight = !showAmbientLight; break;
+                        case 2: showPosition = !showPosition; break;
+                        case 3: showRotation = !showRotation; break;
+                        case 4: showScale = !showScale; break;
+                        case 5: showCrop = !showCrop; break;
                     }
+                    propertiesPanel.updateGroupVisibility(
+                        showAmbientLight, showPosition, showRotation, showScale, showCrop);
                     return true;
                 }
                 iy += itemH;
@@ -1781,7 +1768,10 @@ void ofApp::mouseReleased(int x, int y, int button) {
         gizmo.endDrag();
         gizmoInteracting = false;
     }
-    cam.enableMouseInput();
+    // Only re-enable camera if not locked in View mode
+    if (!(appMode == AppMode::View && cameraLocked)) {
+        cam.enableMouseInput();
+    }
 }
 
 void ofApp::windowResized(int w, int h) {
