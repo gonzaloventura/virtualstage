@@ -76,6 +76,11 @@ void ofApp::draw() {
         drawToolbar();
     }
 
+    // Camera lock button (View mode)
+    if (appMode == AppMode::View) {
+        drawCameraLock();
+    }
+
     // Context menu (drawn on top of everything except menu bar)
     if (contextMenuOpen) {
         drawContextMenu();
@@ -374,7 +379,8 @@ void ofApp::drawStatusBar() {
             "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  F:Full  Ctrl+S/O:Save/Open";
 #endif
     } else {
-        hint = "1:Front  2:Top  3:3/4  0:Level  Tab:Designer  F:Full";
+        hint = std::string(cameraLocked ? "[Locked]  " : "") +
+            "1:Front  2:Top  3:3/4  0:Level  Tab:Designer  F:Full";
     }
     ofDrawBitmapString(hint, ofGetWidth() - hint.length() * 8 - 10, barY + 20);
 
@@ -396,6 +402,56 @@ void ofApp::drawToolbar() {
     drawBtn("[W] Move", Gizmo::Mode::Translate, cx - 110);
     drawBtn("[E] Rotate", Gizmo::Mode::Rotate, cx - 35);
     drawBtn("[R] Scale", Gizmo::Mode::Scale, cx + 50);
+    ofSetColor(255);
+}
+
+void ofApp::drawCameraLock() {
+    float btnSize = 30;
+    float btnX = ofGetWidth() - btnSize - 12;
+    float btnY = menuBarHeight + 10;
+    float mx = ofGetMouseX(), my = ofGetMouseY();
+    bool hover = (mx >= btnX && mx <= btnX + btnSize && my >= btnY && my <= btnY + btnSize);
+
+    // Background
+    ofSetColor(cameraLocked ? ofColor(200, 60, 60, 180) : ofColor(60, 60, 60, hover ? 180 : 120));
+    ofDrawRectRounded(btnX, btnY, btnSize, btnSize, 4);
+
+    // Lock icon (simple padlock shape)
+    float cx = btnX + btnSize / 2;
+    float cy = btnY + btnSize / 2;
+
+    if (cameraLocked) {
+        // Locked: closed padlock
+        ofSetColor(255);
+        // Body
+        ofDrawRectangle(cx - 7, cy - 1, 14, 10);
+        // Shackle (closed arc)
+        ofNoFill();
+        ofSetLineWidth(2);
+        ofDrawLine(cx - 5, cy - 1, cx - 5, cy - 5);
+        ofDrawLine(cx + 5, cy - 1, cx + 5, cy - 5);
+        ofDrawLine(cx - 5, cy - 5, cx - 2, cy - 9);
+        ofDrawLine(cx + 5, cy - 5, cx + 2, cy - 9);
+        ofDrawLine(cx - 2, cy - 9, cx + 2, cy - 9);
+        ofFill();
+        ofSetLineWidth(1);
+    } else {
+        // Unlocked: open padlock
+        ofSetColor(200);
+        // Body
+        ofDrawRectangle(cx - 7, cy - 1, 14, 10);
+        // Shackle (open)
+        ofNoFill();
+        ofSetLineWidth(2);
+        ofDrawLine(cx - 5, cy - 1, cx - 5, cy - 5);
+        ofDrawLine(cx - 5, cy - 5, cx - 2, cy - 9);
+        ofDrawLine(cx - 2, cy - 9, cx + 2, cy - 9);
+        ofDrawLine(cx + 2, cy - 9, cx + 5, cy - 5);
+        // Open shackle lifts on right
+        ofFill();
+        ofSetLineWidth(1);
+    }
+
     ofSetColor(255);
 }
 
@@ -940,6 +996,14 @@ void ofApp::keyPressed(int key) {
             // Deactivate gizmo interaction
             gizmo.endDrag();
             gizmoInteracting = false;
+            // Respect camera lock state
+            if (cameraLocked) {
+                cam.disableMouseInput();
+            } else {
+                cam.enableMouseInput();
+            }
+        } else {
+            // Designer mode: always allow camera
             cam.enableMouseInput();
         }
         // Always-on-top in View mode
@@ -1519,6 +1583,22 @@ void ofApp::mousePressed(int x, int y, int button) {
 
     // Menu bar always takes priority
     if (handleMenuClick(x, y)) return;
+
+    // Camera lock button (View mode)
+    if (appMode == AppMode::View) {
+        float btnSize = 30;
+        float btnX = ofGetWidth() - btnSize - 12;
+        float btnY = menuBarHeight + 10;
+        if (x >= btnX && x <= btnX + btnSize && y >= btnY && y <= btnY + btnSize) {
+            cameraLocked = !cameraLocked;
+            if (cameraLocked) {
+                cam.disableMouseInput();
+            } else {
+                cam.enableMouseInput();
+            }
+            return;
+        }
+    }
 
     // --- Mapping mode mouse ---
     if (mappingMode) {

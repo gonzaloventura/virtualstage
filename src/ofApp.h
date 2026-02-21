@@ -56,6 +56,10 @@ private:
     // Background brightness (0=black, 30=default, 60=light)
     int bgBrightness = 30;
 
+    // Camera lock (View mode)
+    bool cameraLocked = false;
+    void drawCameraLock();
+
     // Right-click context menu
     bool contextMenuOpen = false;
     int contextScreenIndex = -1;
