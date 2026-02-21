@@ -260,7 +260,25 @@ jobs:
             cp -r "${BIN_DIR}/data" "${APP}/Contents/Resources/"
           fi
 
-          cd "${BIN_DIR}" && zip -r "${GITHUB_WORKSPACE}/VirtualStage-macOS.zip" "$(basename "${APP}")"
+          # Bundle Syphon.framework (required at runtime)
+          SYPHON_FW="${OF_DIR}/addons/ofxSyphon/libs/Syphon/lib/osx/Syphon.framework"
+          if [ -d "$SYPHON_FW" ]; then
+            cp -R "$SYPHON_FW" "${APP}/Contents/Frameworks/"
+            echo "Bundled Syphon.framework"
+
+            # Fix rpath so the binary finds Syphon in the bundle
+            BINARY="${APP}/Contents/MacOS/VirtualStage"
+            install_name_tool -add_rpath @executable_path/../Frameworks "$BINARY" 2>/dev/null || true
+            echo "Added @executable_path/../Frameworks rpath"
+          else
+            echo "WARNING: Syphon.framework not found at ${SYPHON_FW}"
+          fi
+
+          # Ad-hoc code sign (required for macOS Gatekeeper on ARM)
+          codesign --force --deep -s - "${APP}"
+          echo "Ad-hoc signed app bundle"
+
+          cd "${BIN_DIR}" && zip -y -r "${GITHUB_WORKSPACE}/VirtualStage-macOS.zip" "$(basename "${APP}")"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
