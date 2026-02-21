@@ -165,6 +165,9 @@ jobs:
             ldd "$EXE" | grep -i '/mingw64/' | awk '{print $3}' | while read dll; do
               [ -f "$dll" ] && cp -n "$dll" artifact/
             done
+            # Rename executable to "VirtualStage Beta"
+            mv "$EXE" "artifact/VirtualStage Beta.exe"
+            echo "Renamed to VirtualStage Beta.exe"
           fi
 
           cd artifact && zip -r "${GITHUB_WORKSPACE}/VirtualStage-Windows.zip" .
@@ -279,6 +282,18 @@ jobs:
           else
             echo "WARNING: Syphon.framework not found at ${SYPHON_FW}"
           fi
+
+          # Rename app bundle to "VirtualStage Beta"
+          NEW_APP="${BIN_DIR}/VirtualStage Beta.app"
+          mv "${APP}" "${NEW_APP}"
+          APP="${NEW_APP}"
+          echo "Renamed to VirtualStage Beta.app"
+
+          # Update Info.plist with correct name
+          PLIST="${APP}/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName 'VirtualStage Beta'" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'VirtualStage Beta'" "$PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 'VirtualStage Beta'" "$PLIST" 2>/dev/null || true
 
           # Ad-hoc code sign (required for macOS Gatekeeper on ARM)
           codesign --force --deep -s - "${APP}"
