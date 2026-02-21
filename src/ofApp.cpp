@@ -89,7 +89,10 @@ void ofApp::draw() {
         drawContextMenu();
     }
 
-    drawMenuBar();
+    // Hide menu bar in View mode for clean look
+    if (appMode != AppMode::View) {
+        drawMenuBar();
+    }
     drawStatusBar();
 }
 
@@ -345,47 +348,53 @@ void ofApp::drawStatusBar() {
         ofDrawBitmapString("VIEW", 10, barY + 20);
     }
 
-    // Project name
     float nextX = 100;
-    if (!currentProjectPath.empty()) {
-        ofSetColor(200, 200, 100);
-        std::string projName = ofFilePath::getFileName(currentProjectPath);
-        ofDrawBitmapString(projName, nextX, barY + 20);
-        nextX += projName.length() * 8 + 15;
-    }
 
-    // FPS
-    ofSetColor(150);
-    std::string fpsStr = "FPS: " + ofToString((int)ofGetFrameRate());
-    ofDrawBitmapString(fpsStr, nextX, barY + 20);
+    if (appMode == AppMode::View) {
+        // View mode: minimal status bar — only FPS + essential hints
+        ofSetColor(150);
+        std::string fpsStr = "FPS: " + ofToString((int)ofGetFrameRate());
+        ofDrawBitmapString(fpsStr, nextX, barY + 20);
 
-    // Server count
-    nextX += fpsStr.length() * 8 + 15;
-    ofSetColor(150);
-    std::string srvStr = "Servers: " + ofToString(scene.getServerCount());
-    ofDrawBitmapString(srvStr, nextX, barY + 20);
-
-    // Hints
-    ofSetColor(100);
-    std::string hint;
-    if (linkState == LinkState::Confirm) {
-        ofSetColor(255, 200, 0);
-        hint = "Re-link? L:Yes  Esc:Cancel";
-    } else if (linkState == LinkState::ChooseRect) {
-        ofSetColor(255, 200, 0);
-        hint = "Use rects from Resolume:  I:Input  O:Output  Esc:Cancel";
-    } else if (appMode == AppMode::Designer) {
-        hint = gizmo.getModeString() +
-#ifdef TARGET_OSX
-            "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  F:Full  Cmd+S/O:Save/Open";
-#else
-            "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  F:Full  Ctrl+S/O:Save/Open";
-#endif
+        ofSetColor(100);
+        std::string hint = "Tab:Designer  F:Full";
+        ofDrawBitmapString(hint, ofGetWidth() - hint.length() * 8 - 10, barY + 20);
     } else {
-        hint = std::string(cameraLocked ? "[Locked]  " : "") +
-            "1:Front  2:Top  3:3/4  0:Level  Tab:Designer  F:Full";
+        // Designer mode: full status bar
+        if (!currentProjectPath.empty()) {
+            ofSetColor(200, 200, 100);
+            std::string projName = ofFilePath::getFileName(currentProjectPath);
+            ofDrawBitmapString(projName, nextX, barY + 20);
+            nextX += projName.length() * 8 + 15;
+        }
+
+        ofSetColor(150);
+        std::string fpsStr = "FPS: " + ofToString((int)ofGetFrameRate());
+        ofDrawBitmapString(fpsStr, nextX, barY + 20);
+
+        nextX += fpsStr.length() * 8 + 15;
+        ofSetColor(150);
+        std::string srvStr = "Servers: " + ofToString(scene.getServerCount());
+        ofDrawBitmapString(srvStr, nextX, barY + 20);
+
+        ofSetColor(100);
+        std::string hint;
+        if (linkState == LinkState::Confirm) {
+            ofSetColor(255, 200, 0);
+            hint = "Re-link? L:Yes  Esc:Cancel";
+        } else if (linkState == LinkState::ChooseRect) {
+            ofSetColor(255, 200, 0);
+            hint = "Use rects from Resolume:  I:Input  O:Output  Esc:Cancel";
+        } else {
+            hint = gizmo.getModeString() +
+#ifdef TARGET_OSX
+                "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  F:Full  Cmd+S/O:Save/Open";
+#else
+                "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  F:Full  Ctrl+S/O:Save/Open";
+#endif
+        }
+        ofDrawBitmapString(hint, ofGetWidth() - hint.length() * 8 - 10, barY + 20);
     }
-    ofDrawBitmapString(hint, ofGetWidth() - hint.length() * 8 - 10, barY + 20);
 
     ofSetColor(255);
 }
