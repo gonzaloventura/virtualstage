@@ -172,7 +172,11 @@ void ofApp::drawStatusBar() {
         hint = "Use rects from Resolume:  I:Input  O:Output  Esc:Cancel";
     } else if (appMode == AppMode::Designer) {
         hint = gizmo.getModeString() +
+#ifdef TARGET_OSX
             "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  F:Full  Cmd+S/O:Save/Open";
+#else
+            "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  F:Full  Ctrl+S/O:Save/Open";
+#endif
     } else {
         hint = "1:Front  2:Top  3:3/4  0:Level  Tab:Designer  F:Full";
     }
@@ -284,8 +288,12 @@ void ofApp::keyPressed(int key) {
         return;
     }
 
-    // Cmd+S / Cmd+Shift+S / Cmd+O (project save/load)
+    // Cmd+S / Cmd+Shift+S / Cmd+O (project save/load) — Ctrl on Windows
+#ifdef TARGET_OSX
     if (ofGetKeyPressed(OF_KEY_SUPER)) {
+#else
+    if (ofGetKeyPressed(OF_KEY_CONTROL)) {
+#endif
         if (key == 's' || key == 'S') {
             saveProject(ofGetKeyPressed(OF_KEY_SHIFT)); // Shift = Save As
             return;

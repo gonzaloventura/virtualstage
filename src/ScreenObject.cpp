@@ -289,12 +289,19 @@ void ScreenObject::connectToSource(const ofxSyphonServerDescription& desc) {
 void ScreenObject::connectToSource(const std::string& senderName) {
     if (spoutSetup) {
         spoutReceiver.release();
+        spoutSetup = false;
     }
-    spoutReceiver.init(senderName);
-    spoutSetup = true;
-    sourceIndex = 0; // mark as connected
-    sourceName = senderName;
-    ofLogNotice("ScreenObject") << name << " connected to: " << sourceName;
+    spoutTexture.clear(); // force re-allocate on next receive
+    if (spoutReceiver.init(senderName)) {
+        spoutSetup = true;
+        sourceIndex = 0; // mark as connected
+        sourceName = senderName;
+        ofLogNotice("ScreenObject") << name << " connected to Spout: " << sourceName;
+    } else {
+        ofLogError("ScreenObject") << name << " failed to init Spout receiver for: " << senderName;
+        sourceIndex = -1;
+        sourceName = "";
+    }
 }
 
 void ScreenObject::updateSpout() {
