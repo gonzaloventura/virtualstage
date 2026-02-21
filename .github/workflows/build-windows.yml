@@ -260,6 +260,12 @@ jobs:
             cp -r "${BIN_DIR}/data" "${APP}/Contents/Resources/"
           fi
 
+          # Replace default oF icon with custom app icon
+          if [ -f "${GITHUB_WORKSPACE}/icon.icns" ]; then
+            cp "${GITHUB_WORKSPACE}/icon.icns" "${APP}/Contents/Resources/of.icns"
+            echo "Replaced app icon with custom icon.icns"
+          fi
+
           # Bundle Syphon.framework (required at runtime)
           SYPHON_FW="${OF_DIR}/addons/ofxSyphon/libs/Syphon/lib/osx/Syphon.framework"
           if [ -d "$SYPHON_FW" ]; then
