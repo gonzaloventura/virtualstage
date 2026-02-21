@@ -2,6 +2,10 @@
 #include "ofApp.h"
 #include <GLFW/glfw3.h>
 #include "ofXml.h"
+#include <thread>
+#ifdef TARGET_OSX
+#include <unistd.h>
+#endif
 
 void ofApp::setup() {
     ofSetEscapeQuitsApp(false);
@@ -58,6 +62,7 @@ void ofApp::update() {
             saveProject(false);
         }
     }
+
 }
 
 void ofApp::draw() {
@@ -113,6 +118,14 @@ void ofApp::draw() {
         drawMenuBar();
     }
     drawStatusBar();
+
+    // Modal overlays (drawn on top of everything)
+    if (showAboutDialog) {
+        drawAboutDialog();
+    }
+    if (showUpdateModal) {
+        drawUpdateModal();
+    }
 }
 
 void ofApp::drawServerList() {
@@ -576,8 +589,19 @@ void ofApp::drawMenuBar() {
     ofSetColor(220);
     ofDrawBitmapString("View", viewX, menuBarHeight - 7);
 
+    // Help button
+    float helpX = viewX + viewW + 15, helpW = 40;
+    bool helpHover = (ofGetMouseX() >= helpX - 5 && ofGetMouseX() <= helpX + helpW + 5 &&
+                      ofGetMouseY() >= 0 && ofGetMouseY() <= menuBarHeight);
+    if (helpMenuOpen || helpHover) {
+        ofSetColor(70, 70, 70);
+        ofDrawRectangle(helpX - 5, 0, helpW + 10, menuBarHeight);
+    }
+    ofSetColor(220);
+    ofDrawBitmapString("Help", helpX, menuBarHeight - 7);
+
     // Autosave indicator
-    float indX = viewX + viewW + 20;
+    float indX = helpX + helpW + 20;
     if (autosaveEnabled) {
         ofSetColor(100, 200, 100);
         ofDrawBitmapString("[Autosave ON]", indX, menuBarHeight - 7);
@@ -612,6 +636,16 @@ void ofApp::drawMenuBar() {
         drawDropdown(viewX - 5, menuBarHeight, 200, items);
     }
 
+    // Help dropdown
+    if (helpMenuOpen) {
+        std::vector<std::tuple<std::string, std::string, bool, bool, bool>> items = {
+            {"Check for Updates", "", false, false, false},
+            {"",                  "", true,  false, false},
+            {"About VirtualStage","", false, false, false},
+        };
+        drawDropdown(helpX - 5, menuBarHeight, 200, items);
+    }
+
     ofSetColor(255);
 }
 
@@ -620,10 +654,13 @@ bool ofApp::handleMenuClick(int x, int y) {
     float viewX = fileX + fileW + 15, viewW = 42;
     float itemH = 24;
 
+    float helpX = viewX + viewW + 15, helpW = 40;
+
     // Click on "File" button
     if (x >= fileX - 5 && x <= fileX + fileW + 5 && y >= 0 && y <= menuBarHeight) {
         fileMenuOpen = !fileMenuOpen;
         viewMenuOpen = false;
+        helpMenuOpen = false;
         contextMenuOpen = false;
         return true;
     }
@@ -632,6 +669,16 @@ bool ofApp::handleMenuClick(int x, int y) {
     if (x >= viewX - 5 && x <= viewX + viewW + 5 && y >= 0 && y <= menuBarHeight) {
         viewMenuOpen = !viewMenuOpen;
         fileMenuOpen = false;
+        helpMenuOpen = false;
+        contextMenuOpen = false;
+        return true;
+    }
+
+    // Click on "Help" button
+    if (x >= helpX - 5 && x <= helpX + helpW + 5 && y >= 0 && y <= menuBarHeight) {
+        helpMenuOpen = !helpMenuOpen;
+        fileMenuOpen = false;
+        viewMenuOpen = false;
         contextMenuOpen = false;
         return true;
     }
@@ -693,6 +740,34 @@ bool ofApp::handleMenuClick(int x, int y) {
             }
         }
         viewMenuOpen = false;
+        return true;
+    }
+
+    // Help dropdown clicks
+    if (helpMenuOpen) {
+        float dropX = helpX - 5, dropW = 200;
+        // items: Check for Updates, sep, About VirtualStage
+        bool isSepH[] = {false, true, false};
+        int totalH = 3;
+        float iy = menuBarHeight;
+
+        if (x >= dropX && x <= dropX + dropW) {
+            for (int i = 0; i < totalH; i++) {
+                if (isSepH[i]) { iy += 10; continue; }
+                if (y >= iy && y < iy + itemH) {
+                    helpMenuOpen = false;
+                    switch (i) {
+                        case 0: checkForUpdates(); break;
+                        case 2:
+                            showAboutDialog = true;
+                            break;
+                    }
+                    return true;
+                }
+                iy += itemH;
+            }
+        }
+        helpMenuOpen = false;
         return true;
     }
 
@@ -996,11 +1071,27 @@ void ofApp::openProject() {
 
 void ofApp::keyPressed(int key) {
     // Close menus on any key press
-    if (fileMenuOpen || viewMenuOpen || contextMenuOpen) {
+    if (fileMenuOpen || viewMenuOpen || helpMenuOpen || contextMenuOpen) {
         fileMenuOpen = false;
         viewMenuOpen = false;
+        helpMenuOpen = false;
         contextMenuOpen = false;
         if (key == OF_KEY_ESC) return; // ESC just closes the menu
+    }
+
+    // Close About dialog on any key
+    if (showAboutDialog) {
+        showAboutDialog = false;
+        return;
+    }
+
+    // Close update modal on Escape (except while downloading)
+    if (showUpdateModal && updateState != UpdateState::Downloading) {
+        if (key == OF_KEY_ESC || updateState != UpdateState::Checking) {
+            showUpdateModal = false;
+            updateState = UpdateState::Idle;
+            return;
+        }
     }
 
     // --- Mapping mode keys ---
@@ -1664,6 +1755,23 @@ void ofApp::drawMappingMode() {
 }
 
 void ofApp::mousePressed(int x, int y, int button) {
+    // Close About dialog on any click
+    if (showAboutDialog) {
+        showAboutDialog = false;
+        return;
+    }
+
+    // Update modal click handling
+    if (showUpdateModal) {
+        if (updateState == UpdateState::Available) {
+            startDownloadAndUpdate();
+        } else if (updateState != UpdateState::Checking && updateState != UpdateState::Downloading) {
+            showUpdateModal = false;
+            updateState = UpdateState::Idle;
+        }
+        return;
+    }
+
     // Right-click: context menu on screens
     if (button == OF_MOUSE_BUTTON_RIGHT) {
         if (contextMenuOpen) {
@@ -1898,4 +2006,337 @@ void ofApp::updatePropertiesForSelection() {
     } else {
         propertiesPanel.setMultipleTargets(count);
     }
+}
+
+// --- Update Checking ---
+
+static int compareVersions(const std::string& a, const std::string& b) {
+    int a1 = 0, a2 = 0, a3 = 0;
+    int b1 = 0, b2 = 0, b3 = 0;
+    sscanf(a.c_str(), "%d.%d.%d", &a1, &a2, &a3);
+    sscanf(b.c_str(), "%d.%d.%d", &b1, &b2, &b3);
+    if (a1 != b1) return a1 - b1;
+    if (a2 != b2) return a2 - b2;
+    return a3 - b3;
+}
+
+void ofApp::checkForUpdates() {
+    if (updateState == UpdateState::Checking || updateState == UpdateState::Downloading) return;
+    updateState = UpdateState::Checking;
+    updateErrorDetail = "";
+    showUpdateModal = true;
+
+    std::thread([this]() {
+        ofHttpRequest req;
+        req.url = "https://api.github.com/repos/gonzaloventura/virtualstage/releases/latest";
+        req.headers["User-Agent"] = "VirtualStage/" APP_VERSION;
+        req.headers["Accept"] = "application/vnd.github.v3+json";
+
+        ofURLFileLoader loader;
+        auto response = loader.handleRequest(req);
+
+        if (response.status != 200) {
+            updateState = UpdateState::Error;
+            updateErrorDetail = "HTTP " + ofToString(response.status);
+            ofLogError("Update") << "HTTP " << response.status;
+            return;
+        }
+
+        try {
+            ofJson json = ofJson::parse(response.data);
+
+            std::string tag = json.value("tag_name", "");
+            if (tag.empty()) {
+                updateState = UpdateState::Error;
+                updateErrorDetail = "No release tag found";
+                return;
+            }
+            latestVersion = tag;
+            if (latestVersion[0] == 'v' || latestVersion[0] == 'V') {
+                latestVersion = latestVersion.substr(1);
+            }
+
+            // Find platform-specific asset download URL
+            latestDownloadUrl = "";
+#ifdef TARGET_OSX
+            std::string assetKeyword = "macOS";
+#elif defined(TARGET_WIN32)
+            std::string assetKeyword = "Windows";
+#else
+            std::string assetKeyword = "";
+#endif
+            if (json.contains("assets") && json["assets"].is_array()) {
+                for (auto& asset : json["assets"]) {
+                    std::string name = asset.value("name", "");
+                    if (!assetKeyword.empty() && name.find(assetKeyword) != std::string::npos) {
+                        latestDownloadUrl = asset.value("browser_download_url", "");
+                        break;
+                    }
+                }
+            }
+
+            // Compare versions (strip -beta etc. for numeric comparison)
+            std::string cleanLatest = latestVersion;
+            std::string cleanCurrent = APP_VERSION;
+            auto stripSuffix = [](std::string& v) {
+                auto pos = v.find('-');
+                if (pos != std::string::npos) v = v.substr(0, pos);
+            };
+            stripSuffix(cleanLatest);
+            stripSuffix(cleanCurrent);
+
+            if (compareVersions(cleanLatest, cleanCurrent) > 0) {
+                updateState = UpdateState::Available;
+            } else {
+                updateState = UpdateState::UpToDate;
+            }
+        } catch (const std::exception& e) {
+            updateState = UpdateState::Error;
+            updateErrorDetail = "Could not parse response";
+            ofLogError("Update") << "JSON parse error: " << e.what();
+        }
+    }).detach();
+}
+
+void ofApp::startDownloadAndUpdate() {
+    if (latestDownloadUrl.empty()) {
+        ofLaunchBrowser("https://github.com/gonzaloventura/virtualstage/releases/latest");
+        showUpdateModal = false;
+        updateState = UpdateState::Idle;
+        return;
+    }
+
+    updateState = UpdateState::Downloading;
+
+    std::string updateDir = ofFilePath::getUserHomeDir() + "/.virtualstage_update";
+    ofDirectory dir(updateDir);
+    if (!dir.exists()) dir.create(true);
+
+#ifdef TARGET_OSX
+    std::string zipName = "VirtualStage-macOS.zip";
+#elif defined(TARGET_WIN32)
+    std::string zipName = "VirtualStage-Windows.zip";
+#else
+    std::string zipName = "VirtualStage-update.zip";
+#endif
+
+    updateZipPath = updateDir + "/" + zipName;
+    std::string url = latestDownloadUrl;
+    std::string dest = updateZipPath;
+    std::thread([this, url, dest]() {
+        auto response = ofSaveURLTo(url, dest);
+        if (response.status == 200) {
+            ofLogNotice("Update") << "Download complete: " << dest;
+            launchUpdaterAndExit();
+        } else {
+            updateState = UpdateState::Error;
+            updateErrorDetail = "Download failed (HTTP " + ofToString(response.status) + ")";
+            ofLogError("Update") << "Download failed: HTTP " << response.status;
+        }
+    }).detach();
+}
+
+void ofApp::launchUpdaterAndExit() {
+#ifdef TARGET_OSX
+    std::string exeDir = ofFilePath::getCurrentExeDir();
+    std::string macosDir = exeDir;
+    std::string contentsDir = ofFilePath::getEnclosingDirectory(macosDir);
+    std::string appPath = ofFilePath::getEnclosingDirectory(contentsDir);
+    if (!appPath.empty() && appPath.back() == '/') {
+        appPath.pop_back();
+    }
+
+    std::string scriptPath = ofToDataPath("update_macos.sh", true);
+    std::string pid = ofToString(getpid());
+
+    std::string cmd = "bash \"" + scriptPath + "\" \"" + updateZipPath + "\" \"" + appPath + "\" " + pid + " &";
+    ofLogNotice("Update") << "Launching updater: " << cmd;
+    system(cmd.c_str());
+    ofExit();
+
+#elif defined(TARGET_WIN32)
+    std::string exeDir = ofFilePath::getCurrentExeDir();
+    std::string scriptPath = ofToDataPath("update_windows.bat", true);
+    std::string pid = ofToString(GetCurrentProcessId());
+
+    std::string cmd = "start \"\" cmd /c \"" + scriptPath + "\" \"" + updateZipPath + "\" \"" + exeDir + "\" " + pid;
+    ofLogNotice("Update") << "Launching updater: " << cmd;
+    system(cmd.c_str());
+    ofExit();
+
+#else
+    ofLaunchBrowser("https://github.com/gonzaloventura/virtualstage/releases/latest");
+    showUpdateModal = false;
+    updateState = UpdateState::Idle;
+#endif
+}
+
+// --- Update Modal ---
+
+void ofApp::drawUpdateModal() {
+    float w = ofGetWidth();
+    float h = ofGetHeight();
+
+    // Dim background
+    ofSetColor(0, 0, 0, 160);
+    ofDrawRectangle(0, 0, w, h);
+
+    float panelW = 360;
+    float panelH = 170;
+    float px = (w - panelW) / 2;
+    float py = (h - panelH) / 2;
+
+    // Shadow + background
+    ofSetColor(0, 0, 0, 80);
+    ofDrawRectangle(px + 4, py + 4, panelW, panelH);
+    ofSetColor(40, 40, 40);
+    ofDrawRectangle(px, py, panelW, panelH);
+
+    // Border color by state
+    switch (updateState) {
+        case UpdateState::Checking:
+        case UpdateState::Downloading:
+            ofSetColor(255, 200, 0); break;
+        case UpdateState::Available:
+            ofSetColor(100, 220, 100); break;
+        case UpdateState::Error:
+            ofSetColor(255, 80, 80); break;
+        default:
+            ofSetColor(0, 120, 200); break;
+    }
+    ofNoFill();
+    ofSetLineWidth(2);
+    ofDrawRectangle(px, py, panelW, panelH);
+    ofFill();
+    ofSetLineWidth(1);
+
+    float cy = py + 35;
+
+    if (updateState == UpdateState::Checking) {
+        ofSetColor(255, 200, 0);
+        ofDrawBitmapString("Checking for updates...", px + panelW / 2 - 92, cy);
+
+        // Animated dots
+        int dots = ((int)(ofGetElapsedTimef() * 3)) % 4;
+        std::string dotsStr(dots, '.');
+        ofDrawBitmapString(dotsStr, px + panelW / 2 + 96, cy);
+
+        ofSetColor(120);
+        ofDrawBitmapString("Please wait", px + panelW / 2 - 44, cy + 30);
+
+    } else if (updateState == UpdateState::UpToDate) {
+        ofSetColor(0, 200, 255);
+        std::string title = "You're up to date!";
+        ofDrawBitmapString(title, px + panelW / 2 - (title.length() * 8) / 2, cy);
+
+        ofSetColor(180);
+        std::string ver = "Current version: v" APP_VERSION;
+        ofDrawBitmapString(ver, px + panelW / 2 - (ver.length() * 8) / 2, cy + 30);
+
+        ofSetColor(100);
+        ofDrawBitmapString("Click anywhere to close", px + panelW / 2 - 92, py + panelH - 15);
+
+    } else if (updateState == UpdateState::Available) {
+        ofSetColor(100, 220, 100);
+        std::string title = "Update available!";
+        ofDrawBitmapString(title, px + panelW / 2 - (title.length() * 8) / 2, cy);
+
+        ofSetColor(180);
+        std::string from = "Current:  v" APP_VERSION;
+        std::string to =   "Latest:   v" + latestVersion;
+        ofDrawBitmapString(from, px + 60, cy + 30);
+        ofSetColor(100, 220, 100);
+        ofDrawBitmapString(to, px + 60, cy + 50);
+
+        ofSetColor(0, 200, 255);
+        ofDrawBitmapString("Click to download  |  Esc to close", px + panelW / 2 - 140, py + panelH - 15);
+
+    } else if (updateState == UpdateState::Downloading) {
+        ofSetColor(255, 200, 0);
+        ofDrawBitmapString("Downloading update...", px + panelW / 2 - 84, cy);
+
+        int dots = ((int)(ofGetElapsedTimef() * 3)) % 4;
+        std::string dotsStr(dots, '.');
+        ofDrawBitmapString(dotsStr, px + panelW / 2 + 84, cy);
+
+        ofSetColor(120);
+        ofDrawBitmapString("Please wait, do not close the app", px + panelW / 2 - 132, cy + 30);
+
+    } else if (updateState == UpdateState::Error) {
+        ofSetColor(255, 80, 80);
+        std::string title = "Could not check for updates";
+        ofDrawBitmapString(title, px + panelW / 2 - (title.length() * 8) / 2, cy);
+
+        if (!updateErrorDetail.empty()) {
+            ofSetColor(150);
+            ofDrawBitmapString(updateErrorDetail, px + panelW / 2 - (updateErrorDetail.length() * 8) / 2, cy + 30);
+        }
+
+        ofSetColor(100);
+        ofDrawBitmapString("Click anywhere to close", px + panelW / 2 - 92, py + panelH - 15);
+    }
+
+    ofSetColor(255);
+}
+
+// --- About Dialog ---
+
+void ofApp::drawAboutDialog() {
+    float w = ofGetWidth();
+    float h = ofGetHeight();
+
+    // Dim background
+    ofSetColor(0, 0, 0, 160);
+    ofDrawRectangle(0, 0, w, h);
+
+    // Panel
+    float panelW = 340;
+    float panelH = 175;
+    float px = (w - panelW) / 2;
+    float py = (h - panelH) / 2;
+
+    // Shadow
+    ofSetColor(0, 0, 0, 80);
+    ofDrawRectangle(px + 4, py + 4, panelW, panelH);
+
+    // Background
+    ofSetColor(40, 40, 40);
+    ofDrawRectangle(px, py, panelW, panelH);
+
+    // Border
+    ofSetColor(0, 120, 200);
+    ofNoFill();
+    ofSetLineWidth(2);
+    ofDrawRectangle(px, py, panelW, panelH);
+    ofFill();
+    ofSetLineWidth(1);
+
+    // Title
+    ofSetColor(0, 200, 255);
+    ofDrawBitmapString("VirtualStage", px + panelW / 2 - 48, py + 35);
+
+    // Version
+    ofSetColor(180);
+    std::string verStr = "v" APP_VERSION;
+    ofDrawBitmapString(verStr, px + panelW / 2 - (verStr.length() * 8) / 2, py + 55);
+
+    // Separator
+    ofSetColor(80);
+    ofDrawLine(px + 20, py + 68, px + panelW - 20, py + 68);
+
+    // Description
+    ofSetColor(200);
+    ofDrawBitmapString("3D virtual screen layout tool", px + 30, py + 90);
+    ofDrawBitmapString("for stage design.", px + 30, py + 108);
+
+    ofSetColor(140);
+    ofDrawBitmapString("Built by Gonzalo Ventura", px + 30, py + 135);
+    ofSetColor(0, 180, 255);
+    ofDrawBitmapString("Ventu.dev", px + 30 + 24 * 8, py + 135);
+
+    // Close hint
+    ofSetColor(100);
+    ofDrawBitmapString("Click anywhere to close", px + panelW / 2 - 92, py + panelH - 10);
+
+    ofSetColor(255);
 }

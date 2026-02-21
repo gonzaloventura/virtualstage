@@ -7,8 +7,10 @@
 #include "Gizmo.h"
 #include "PropertiesPanel.h"
 #include "UndoManager.h"
+#include "AppVersion.h"
 
 enum class AppMode { Designer, View };
+enum class UpdateState { Idle, Checking, Available, UpToDate, Error, Downloading };
 
 class ofApp : public ofBaseApp {
 public:
@@ -51,6 +53,7 @@ private:
     float menuBarHeight = 25.0f;
     bool fileMenuOpen = false;
     bool viewMenuOpen = false;
+    bool helpMenuOpen = false;
     void drawMenuBar();
     bool handleMenuClick(int x, int y); // returns true if click was consumed
 
@@ -120,4 +123,20 @@ private:
     float snapValue(float v) const;
     ofRectangle getMapPreviewArea() const;
     void drawMappingMode();
+
+    // Update checking
+    UpdateState updateState = UpdateState::Idle;
+    std::string latestVersion;
+    std::string latestDownloadUrl;
+    std::string updateErrorDetail;
+    bool showUpdateModal = false;
+    std::string updateZipPath;
+    void checkForUpdates();
+    void startDownloadAndUpdate();
+    void launchUpdaterAndExit();
+    void drawUpdateModal();
+
+    // About dialog
+    bool showAboutDialog = false;
+    void drawAboutDialog();
 };
