@@ -175,10 +175,103 @@ jobs:
           name: VirtualStage-Windows
           path: VirtualStage-Windows.zip
 
+  # ───────────────────────────── macOS (Syphon) ──────────────────────────────
+  build-macos:
+    runs-on: macos-14
+    env:
+      OF_ARCHIVE: of_v0.12.0_osx_release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache openFrameworks
+        id: cache-of-mac
+        uses: actions/cache@v4
+        with:
+          path: ~/of
+          key: of-osx-v0.12.0-v2
+
+      - name: Download openFrameworks
+        if: steps.cache-of-mac.outputs.cache-hit != 'true'
+        run: |
+          curl -L -o /tmp/of.tar.gz \
+            "https://github.com/openframeworks/openFrameworks/releases/download/${OF_VERSION}/${OF_ARCHIVE}.tar.gz"
+          mkdir -p ~/of
+          cd ~/of && tar xzf /tmp/of.tar.gz
+          rm /tmp/of.tar.gz
+
+      - name: Clone ofxSyphon addon
+        run: |
+          ADDON_DIR=~/of/${OF_ARCHIVE}/addons
+          if [ ! -d "${ADDON_DIR}/ofxSyphon" ]; then
+            git clone --depth 1 https://github.com/astellato/ofxSyphon.git "${ADDON_DIR}/ofxSyphon"
+          fi
+
+      - name: Setup project in oF tree
+        run: |
+          OF_DIR=~/of/${OF_ARCHIVE}
+          PROJECT="${OF_DIR}/apps/myApps/VirtualStage"
+          rm -rf "${PROJECT}"
+          mkdir -p "${PROJECT}/src"
+
+          # Copy all source files
+          cp src/*.h src/*.cpp "${PROJECT}/src/"
+
+          # Rename Syphon-dependent files to .mm for Objective-C++ compilation
+          # (make build system compiles .mm as ObjC++ automatically)
+          mv "${PROJECT}/src/Scene.cpp" "${PROJECT}/src/Scene.mm"
+          mv "${PROJECT}/src/ScreenObject.cpp" "${PROJECT}/src/ScreenObject.mm"
+
+          cp config.make "${PROJECT}/"
+          cp addons.make "${PROJECT}/"
+
+          printf '%s\n' \
+            'ifneq ($(wildcard config.make),)' \
+            '	include config.make' \
+            'endif' \
+            'ifndef OF_ROOT' \
+            '	OF_ROOT=../../..' \
+            'endif' \
+            'include $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk' \
+            > "${PROJECT}/Makefile"
+
+      - name: Build
+        run: |
+          cd ~/of/${OF_ARCHIVE}/apps/myApps/VirtualStage
+          make Release -j$(sysctl -n hw.ncpu)
+
+      - name: Package artifact
+        run: |
+          OF_DIR=~/of/${OF_ARCHIVE}
+          BIN_DIR="${OF_DIR}/apps/myApps/VirtualStage/bin"
+
+          # Find the .app bundle
+          APP=$(find "${BIN_DIR}" -maxdepth 1 -name '*.app' -print -quit)
+          if [ -z "$APP" ]; then
+            echo "ERROR: No .app bundle found in ${BIN_DIR}"
+            ls -la "${BIN_DIR}"
+            exit 1
+          fi
+
+          echo "Found app: ${APP}"
+
+          # Copy data folder into the bundle if it exists
+          if [ -d "${BIN_DIR}/data" ]; then
+            cp -r "${BIN_DIR}/data" "${APP}/Contents/Resources/"
+          fi
+
+          cd "${BIN_DIR}" && zip -r "${GITHUB_WORKSPACE}/VirtualStage-macOS.zip" "$(basename "${APP}")"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VirtualStage-macOS
+          path: VirtualStage-macOS.zip
+
   # ─────────────────────────── GitHub Release ────────────────────────────────
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-windows]
+    needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -192,4 +285,5 @@ jobs:
         with:
           files: |
             VirtualStage-Windows/VirtualStage-Windows.zip
+            VirtualStage-macOS/VirtualStage-macOS.zip
           generate_release_notes: true
