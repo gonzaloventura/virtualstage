@@ -2,35 +2,38 @@
 #include "PropertiesPanel.h"
 
 void PropertiesPanel::setup(float x, float y) {
-    ambientGroup.setName("Ambient Light");
-    ambientGroup.add(ambientLight);
-    ambientGroup.add(ambientReset);
-
-    posGroup.setName("Position");
-    posGroup.add(posX);
-    posGroup.add(posY);
-    posGroup.add(posZ);
-
-    rotGroup.setName("Rotation");
-    rotGroup.add(rotX);
-    rotGroup.add(rotY);
-    rotGroup.add(rotZ);
-
-    scaleGroup.setName("Scale");
-    scaleGroup.add(scaleX);
-    scaleGroup.add(scaleY);
-
-    curvatureGroup.setName("Curvature");
-    curvatureGroup.add(curvatureParam);
-
-    cropGroup.setName("Input Mapping (M to edit)");
-    cropGroup.add(cropX);
-    cropGroup.add(cropY);
-    cropGroup.add(cropW);
-    cropGroup.add(cropH);
-
+    // Main panel: header + labels only
     panel.setup("Properties", "properties.xml", x, y);
-    rebuildPanel();
+    panel.add(nameLabel.setup("Object", "None"));
+    panel.add(sourceLabel.setup("Source", "None"));
+
+    // Standalone GUI groups (drawn below panel, visibility controlled)
+    ambientGui.setup("Ambient Light");
+    ambientGui.add(ambientLight);
+    ambientGui.add(ambientReset);
+
+    posGui.setup("Position");
+    posGui.add(posX);
+    posGui.add(posY);
+    posGui.add(posZ);
+
+    rotGui.setup("Rotation");
+    rotGui.add(rotX);
+    rotGui.add(rotY);
+    rotGui.add(rotZ);
+
+    scaleGui.setup("Scale");
+    scaleGui.add(scaleX);
+    scaleGui.add(scaleY);
+
+    curvatureGui.setup("Curvature");
+    curvatureGui.add(curvatureParam);
+
+    cropGui.setup("Input Mapping (M to edit)");
+    cropGui.add(cropX);
+    cropGui.add(cropY);
+    cropGui.add(cropW);
+    cropGui.add(cropH);
 
     // Add listeners
     posX.addListener(this, &PropertiesPanel::onParamChanged);
@@ -49,20 +52,34 @@ void PropertiesPanel::setup(float x, float y) {
     ambientReset.addListener(this, &PropertiesPanel::onAmbientReset);
 }
 
-void PropertiesPanel::rebuildPanel() {
-    float x = panel.getPosition().x;
-    float y = panel.getPosition().y;
-    panel.clear();
-    panel.add(nameLabel.setup("Object", target ? target->name : "None"));
-    panel.add(sourceLabel.setup("Source",
-        (target && target->hasSource()) ? target->sourceName : "None (1-9 to assign)"));
-    if (visAmbient) panel.add(ambientGroup);
-    if (visPos) panel.add(posGroup);
-    if (visRot) panel.add(rotGroup);
-    if (visScale) panel.add(scaleGroup);
-    panel.add(curvatureGroup);
-    if (visCrop) panel.add(cropGroup);
+void PropertiesPanel::setPosition(float x, float y) {
     panel.setPosition(x, y);
+}
+
+void PropertiesPanel::draw() {
+    if (!visible) return;
+
+    // Draw main panel (header + labels)
+    panel.draw();
+
+    // Draw visible groups below the panel
+    float x = panel.getPosition().x;
+    float w = panel.getWidth();
+    float y = panel.getPosition().y + panel.getHeight();
+
+    auto drawGroup = [&](ofxGuiGroup& gui) {
+        gui.setPosition(x, y);
+        gui.setWidthElements(w);
+        gui.draw();
+        y += gui.getHeight();
+    };
+
+    if (visAmbient) drawGroup(ambientGui);
+    if (visPos) drawGroup(posGui);
+    if (visRot) drawGroup(rotGui);
+    if (visScale) drawGroup(scaleGui);
+    drawGroup(curvatureGui); // always visible
+    if (visCrop) drawGroup(cropGui);
 }
 
 void PropertiesPanel::updateGroupVisibility(bool ambient, bool pos, bool rot, bool scale, bool crop) {
@@ -71,16 +88,6 @@ void PropertiesPanel::updateGroupVisibility(bool ambient, bool pos, bool rot, bo
     visRot = rot;
     visScale = scale;
     visCrop = crop;
-    rebuildPanel();
-}
-
-void PropertiesPanel::setPosition(float x, float y) {
-    panel.setPosition(x, y);
-}
-
-void PropertiesPanel::draw() {
-    if (!visible) return;
-    panel.draw();
 }
 
 void PropertiesPanel::setTarget(ScreenObject* t) {

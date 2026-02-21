@@ -23,11 +23,11 @@ public:
     float getAmbientLight() const { return ambientLight; }
 
 private:
-    ofxPanel panel;
+    ofxPanel panel; // header + labels only
 
+    // Parameters
     ofParameter<float> ambientLight{"Ambient", 60, 0, 100};
     ofParameter<bool> ambientReset{"Reset to 60", false};
-    ofParameterGroup ambientGroup;
 
     ofParameter<float> posX{"X", 0, -2000, 2000};
     ofParameter<float> posY{"Y", 0, -2000, 2000};
@@ -45,11 +45,14 @@ private:
     ofParameter<float> cropW{"Crop W", 1, 0, 1};
     ofParameter<float> cropH{"Crop H", 1, 0, 1};
 
-    ofParameterGroup posGroup;
-    ofParameterGroup rotGroup;
-    ofParameterGroup scaleGroup;
-    ofParameterGroup curvatureGroup;
-    ofParameterGroup cropGroup;
+    // Standalone GUI groups (drawn manually, not inside panel)
+    ofxGuiGroup ambientGui;
+    ofxGuiGroup posGui;
+    ofxGuiGroup rotGui;
+    ofxGuiGroup scaleGui;
+    ofxGuiGroup curvatureGui;
+    ofxGuiGroup cropGui;
+
     ofxLabel nameLabel;
     ofxLabel sourceLabel;
 
@@ -64,7 +67,6 @@ private:
     bool visScale = true;
     bool visCrop = true;
 
-    void rebuildPanel();
     void onParamChanged(float& val);
     void onAmbientReset(bool& val);
 };
