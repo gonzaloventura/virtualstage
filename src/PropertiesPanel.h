@@ -2,6 +2,7 @@
 #include "ofMain.h"
 #include "ofxGui.h"
 #include "ScreenObject.h"
+#include <functional>
 
 class PropertiesPanel {
 public:
@@ -10,8 +11,12 @@ public:
     void draw();
 
     void setTarget(ScreenObject* target);
+    void setMultipleTargets(int count);
     void syncFromTarget();
     void syncToTarget();
+
+    // Callback invoked when a property value changes (for undo capture)
+    std::function<void()> onPropertyChanged;
 
     bool isVisible() const { return visible; }
     void setVisible(bool v) { visible = v; }
@@ -59,6 +64,8 @@ private:
     ScreenObject* target = nullptr;
     bool visible = true;
     bool syncing = false;
+    bool multiMode = false;
+    int multiCount = 0;
 
     // Group visibility flags
     bool visAmbient = false;

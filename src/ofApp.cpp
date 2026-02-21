@@ -21,6 +21,16 @@ void ofApp::setup() {
 
     // Properties panel (right side)
     propertiesPanel.setup(ofGetWidth() - 240, 10);
+    propertiesPanel.onPropertyChanged = [this]() {
+        if (!propsDirty) {
+            pushUndo();
+            propsDirty = true;
+            propsDirtyTimer = 0;
+        }
+    };
+
+    // Push initial undo state
+    undoManager.pushState(scene);
 }
 
 void ofApp::update() {
@@ -30,6 +40,15 @@ void ofApp::update() {
 
     // Update background from ambient light slider (0-100 → 0-60)
     bgBrightness = (int)(propertiesPanel.getAmbientLight() * 0.6f);
+
+    // Reset properties dirty flag after idle (allows new undo capture)
+    if (propsDirty) {
+        propsDirtyTimer += ofGetLastFrameTime();
+        if (propsDirtyTimer > 0.5f) {
+            propsDirty = false;
+            propsDirtyTimer = 0;
+        }
+    }
 
     // Autosave
     if (autosaveEnabled && !currentProjectPath.empty()) {
@@ -61,10 +80,10 @@ void ofApp::draw() {
 
     scene.draw(appMode == AppMode::View);
 
-    // Gizmo for selected object (Designer mode only)
-    if (appMode == AppMode::Designer && scene.selectedIndex >= 0 && scene.getScreen(scene.selectedIndex)) {
+    // Gizmo for selected object (Designer mode only) — draw on primary selected
+    if (appMode == AppMode::Designer && scene.getPrimarySelected() >= 0 && scene.getScreen(scene.getPrimarySelected())) {
         ofDisableDepthTest();
-        gizmo.draw(*scene.getScreen(scene.selectedIndex), cam);
+        gizmo.draw(*scene.getScreen(scene.getPrimarySelected()), cam);
         ofEnableDepthTest();
     }
 
@@ -142,7 +161,7 @@ void ofApp::drawServerList() {
 
         float rowTop = curY;
         float rowBot = curY + rowH;
-        bool selected = (scene.selectedIndex == i);
+        bool selected = scene.isSelected(i);
         bool hovered = (mouseX >= panelX && mouseX < serverListWidth &&
                         mouseY >= rowTop && mouseY < rowBot &&
                         mouseY >= panelY && mouseY < panelY + panelH);
@@ -201,11 +220,11 @@ void ofApp::drawServerList() {
         float rowTop = curY;
         float rowBot = curY + rowH;
 
-        // Check if assigned to selected screen
+        // Check if assigned to any selected screen
         bool assigned = false;
-        if (scene.selectedIndex >= 0) {
-            auto* sel = scene.getScreen(scene.selectedIndex);
-            if (sel && sel->sourceIndex == (int)i) assigned = true;
+        for (int si : scene.selectedIndices) {
+            auto* sel = scene.getScreen(si);
+            if (sel && sel->sourceIndex == (int)i) { assigned = true; break; }
         }
 
         bool hovered = (mouseX >= panelX && mouseX < serverListWidth &&
@@ -280,19 +299,24 @@ bool ofApp::handleSidebarClick(int x, int y) {
             float xBtnY = rowTop + (rowH - xBtnSize) / 2;
             if (x >= xBtnX && x <= xBtnX + xBtnSize &&
                 y >= xBtnY && y <= xBtnY + xBtnSize) {
+                pushUndo();
                 scene.removeScreen(i);
-                if (scene.selectedIndex < 0 || scene.selectedIndex >= scene.getScreenCount()) {
-                    scene.selectedIndex = -1;
-                    propertiesPanel.setTarget(nullptr);
-                } else {
-                    propertiesPanel.setTarget(scene.getScreen(scene.selectedIndex));
-                }
+                updatePropertiesForSelection();
                 return true;
             }
 
-            // Click on row → select screen
-            scene.selectedIndex = i;
-            propertiesPanel.setTarget(scene.getScreen(i));
+            // Click on row — Cmd/Ctrl toggles, plain click selects only
+#ifdef TARGET_OSX
+            bool multiKey = ofGetKeyPressed(OF_KEY_SUPER);
+#else
+            bool multiKey = ofGetKeyPressed(OF_KEY_CONTROL);
+#endif
+            if (multiKey) {
+                scene.toggleSelected(i);
+            } else {
+                scene.selectOnly(i);
+            }
+            updatePropertiesForSelection();
             return true;
         }
         curY += rowH;
@@ -309,10 +333,13 @@ bool ofApp::handleSidebarClick(int x, int y) {
         float rowBot = curY + rowH;
 
         if (y >= rowTop && y < rowBot) {
-            // Click on server → assign to selected screen
-            if (scene.selectedIndex >= 0) {
-                scene.assignSourceToScreen(scene.selectedIndex, (int)i);
-                propertiesPanel.setTarget(scene.getScreen(scene.selectedIndex));
+            // Click on server → assign to all selected screens
+            if (scene.getSelectionCount() > 0) {
+                pushUndo();
+                for (int si : scene.getSelectedIndicesSorted()) {
+                    scene.assignSourceToScreen(si, (int)i);
+                }
+                updatePropertiesForSelection();
             }
             return true;
         }
@@ -388,9 +415,9 @@ void ofApp::drawStatusBar() {
         } else {
             hint = gizmo.getModeString() +
 #ifdef TARGET_OSX
-                "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  F:Full  Cmd+S/O:Save/Open";
+                "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  Cmd+Z:Undo  Cmd+S/O:Save/Open";
 #else
-                "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  F:Full  Ctrl+S/O:Save/Open";
+                "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  Ctrl+Z:Undo  Ctrl+S/O:Save/Open";
 #endif
         }
         ofDrawBitmapString(hint, ofGetWidth() - hint.length() * 8 - 10, barY + 20);
@@ -807,14 +834,15 @@ bool ofApp::handleContextMenuClick(int x, int y) {
                 switch (it.action) {
                     case CTX_MAP:
                         // Open mapping mode for this screen
-                        scene.selectedIndex = contextScreenIndex;
-                        propertiesPanel.setTarget(scene.getScreen(contextScreenIndex));
+                        scene.selectOnly(contextScreenIndex);
+                        updatePropertiesForSelection();
                         mappingMode = true;
                         cam.disableMouseInput();
                         break;
                     case CTX_DUPLICATE: {
                         // Duplicate screen via JSON round-trip
                         if (screen) {
+                            pushUndo();
                             ofJson j = screen->toJson();
                             auto dup = std::make_unique<ScreenObject>();
                             dup->fromJson(j);
@@ -837,26 +865,29 @@ bool ofApp::handleContextMenuClick(int x, int y) {
                                         break;
                                     }
                                 }
-                                scene.selectedIndex = newIdx;
-                                propertiesPanel.setTarget(scene.getScreen(newIdx));
+                                scene.selectOnly(newIdx);
                             } else {
                                 scene.screens.push_back(std::move(dup));
                                 int newIdx = (int)scene.screens.size() - 1;
-                                scene.selectedIndex = newIdx;
-                                propertiesPanel.setTarget(scene.getScreen(newIdx));
+                                scene.selectOnly(newIdx);
                             }
+                            updatePropertiesForSelection();
                         }
                         break;
                     }
                     case CTX_DISCONNECT:
-                        if (screen) screen->disconnectSource();
-                        propertiesPanel.setTarget(screen);
+                        if (screen) {
+                            pushUndo();
+                            screen->disconnectSource();
+                        }
+                        updatePropertiesForSelection();
                         break;
                     default:
                         // Assign server (action = server index)
                         if (it.action >= 0) {
+                            pushUndo();
                             scene.assignSourceToScreen(contextScreenIndex, it.action);
-                            propertiesPanel.setTarget(scene.getScreen(contextScreenIndex));
+                            updatePropertiesForSelection();
                         }
                         break;
                 }
@@ -874,11 +905,12 @@ bool ofApp::handleContextMenuClick(int x, int y) {
 // --- New Project ---
 
 void ofApp::newProject() {
+    pushUndo();
     // Clear all screens and reset state
     while (scene.getScreenCount() > 0) {
         scene.removeScreen(0);
     }
-    scene.selectedIndex = -1;
+    scene.clearSelection();
     propertiesPanel.setTarget(nullptr);
     currentProjectPath = "";
 
@@ -888,6 +920,10 @@ void ofApp::newProject() {
     // Reset camera
     cam.setDistance(800);
     cam.setTarget(glm::vec3(0, 100, 0));
+
+    // Reset undo for fresh project
+    undoManager.clear();
+    undoManager.pushState(scene);
 
     ofLogNotice("ofApp") << "New project created";
 }
@@ -944,9 +980,13 @@ void ofApp::openProject() {
         }
 
         // Reset UI state
-        scene.selectedIndex = -1;
+        scene.clearSelection();
         propertiesPanel.setTarget(nullptr);
         refreshServerList();
+
+        // Reset undo for loaded project
+        undoManager.clear();
+        undoManager.pushState(scene);
 
         ofLogNotice("ofApp") << "Project loaded: " << result.filePath;
     } else {
@@ -972,7 +1012,7 @@ void ofApp::keyPressed(int key) {
             mapSnapEnabled = !mapSnapEnabled;
         } else if (key == 'r' || key == 'R') {
             // Reset crop to full
-            auto* screen = scene.getScreen(scene.selectedIndex);
+            auto* screen = scene.getScreen(scene.getPrimarySelected());
             if (screen) {
                 screen->setCropRect(ofRectangle(0, 0, 1, 1));
                 propertiesPanel.syncFromTarget();
@@ -992,11 +1032,25 @@ void ofApp::keyPressed(int key) {
             openProject();
             return;
         }
+        if (key == 'z' || key == 'Z') {
+            if (ofGetKeyPressed(OF_KEY_SHIFT)) {
+                if (undoManager.redo(scene)) {
+                    updatePropertiesForSelection();
+                    ofLogNotice("ofApp") << "Redo";
+                }
+            } else {
+                if (undoManager.undo(scene)) {
+                    updatePropertiesForSelection();
+                    ofLogNotice("ofApp") << "Undo";
+                }
+            }
+            return;
+        }
     }
 #else
     {
         // On Windows/GLFW, Ctrl+letter may arrive as a control character
-        // (Ctrl+S=19, Ctrl+O=15) instead of 's'/'S'. Check both approaches.
+        // (Ctrl+S=19, Ctrl+O=15, Ctrl+Z=26) instead of 's'/'S'. Check both approaches.
         auto* win = dynamic_cast<ofAppGLFWWindow*>(ofGetWindowPtr());
         GLFWwindow* gw = win ? win->getGLFWWindow() : nullptr;
         bool ctrlHeld = ofGetKeyPressed(OF_KEY_CONTROL) ||
@@ -1009,6 +1063,20 @@ void ofApp::keyPressed(int key) {
         }
         if ((ctrlHeld && (key == 'o' || key == 'O')) || key == 15) {
             openProject();
+            return;
+        }
+        if ((ctrlHeld && (key == 'z' || key == 'Z')) || key == 26) {
+            if (ofGetKeyPressed(OF_KEY_SHIFT)) {
+                if (undoManager.redo(scene)) {
+                    updatePropertiesForSelection();
+                    ofLogNotice("ofApp") << "Redo";
+                }
+            } else {
+                if (undoManager.undo(scene)) {
+                    updatePropertiesForSelection();
+                    ofLogNotice("ofApp") << "Undo";
+                }
+            }
             return;
         }
     }
@@ -1115,15 +1183,21 @@ void ofApp::keyPressed(int key) {
     // --- Designer-only keys ---
     switch (key) {
         case 'a': case 'A': {
+            pushUndo();
             int idx = scene.addScreen();
-            scene.selectedIndex = idx;
-            propertiesPanel.setTarget(scene.getScreen(idx));
+            scene.selectOnly(idx);
+            updatePropertiesForSelection();
             break;
         }
         case OF_KEY_DEL: case OF_KEY_BACKSPACE:
-            if (scene.selectedIndex >= 0) {
-                scene.removeScreen(scene.selectedIndex);
-                scene.selectedIndex = -1;
+            if (scene.getSelectionCount() > 0) {
+                pushUndo();
+                // Delete all selected in reverse order to keep indices valid
+                auto indices = scene.getSelectedIndicesSorted();
+                for (int i = (int)indices.size() - 1; i >= 0; i--) {
+                    scene.removeScreen(indices[i]);
+                }
+                scene.clearSelection();
                 propertiesPanel.setTarget(nullptr);
             }
             break;
@@ -1148,30 +1222,37 @@ void ofApp::keyPressed(int key) {
             break;
 
         case 'm': case 'M':
-            if (scene.selectedIndex >= 0 && scene.getScreen(scene.selectedIndex)) {
+            if (scene.getPrimarySelected() >= 0 && scene.getScreen(scene.getPrimarySelected())) {
+                // Mapping mode works on primary selected only
+                scene.selectOnly(scene.getPrimarySelected());
+                updatePropertiesForSelection();
                 mappingMode = true;
                 cam.disableMouseInput();
             }
             break;
 
         case 'd': case 'D':
-            // Disconnect source from selected screen
-            if (scene.selectedIndex >= 0) {
-                auto* screen = scene.getScreen(scene.selectedIndex);
-                if (screen) {
-                    screen->disconnectSource();
-                    propertiesPanel.setTarget(screen);
+            // Disconnect source from all selected screens
+            if (scene.getSelectionCount() > 0) {
+                pushUndo();
+                for (int si : scene.getSelectedIndicesSorted()) {
+                    auto* screen = scene.getScreen(si);
+                    if (screen) screen->disconnectSource();
                 }
+                updatePropertiesForSelection();
             }
             break;
 
         default:
-            // 1-9: assign server to selected screen
+            // 1-9: assign server to all selected screens
             if (key >= '1' && key <= '9') {
                 int serverIdx = key - '1';
-                if (scene.selectedIndex >= 0 && serverIdx < (int)servers.size()) {
-                    scene.assignSourceToScreen(scene.selectedIndex, serverIdx);
-                    propertiesPanel.setTarget(scene.getScreen(scene.selectedIndex));
+                if (scene.getSelectionCount() > 0 && serverIdx < (int)servers.size()) {
+                    pushUndo();
+                    for (int si : scene.getSelectedIndicesSorted()) {
+                        scene.assignSourceToScreen(si, serverIdx);
+                    }
+                    updatePropertiesForSelection();
                 }
             }
             break;
@@ -1389,10 +1470,11 @@ void ofApp::loadResolumeXml(bool useInputRect) {
     }
 
     // Clear existing screens
+    pushUndo();
     while (scene.getScreenCount() > 0) {
         scene.removeScreen(0);
     }
-    scene.selectedIndex = -1;
+    scene.clearSelection();
     propertiesPanel.setTarget(nullptr);
 
     // Compute total bounding box for layout and crop
@@ -1460,7 +1542,7 @@ ofRectangle ofApp::getMapPreviewArea() const {
 }
 
 void ofApp::drawMappingMode() {
-    auto* screen = scene.getScreen(scene.selectedIndex);
+    auto* screen = scene.getScreen(scene.getPrimarySelected());
     if (!screen) { mappingMode = false; return; }
 
     ofRectangle preview = getMapPreviewArea();
@@ -1588,12 +1670,12 @@ void ofApp::mousePressed(int x, int y, int button) {
             contextMenuOpen = false;
             return;
         }
-        if (appMode == AppMode::Designer || appMode == AppMode::View) {
+        if (appMode == AppMode::Designer) {
             int hit = scene.pick(cam, glm::vec2(x, y));
             if (hit >= 0) {
                 contextScreenIndex = hit;
-                scene.selectedIndex = hit;
-                propertiesPanel.setTarget(scene.getScreen(hit));
+                scene.selectOnly(hit);
+                updatePropertiesForSelection();
                 contextMenuPos = glm::vec2(x, y);
                 contextMenuOpen = true;
             }
@@ -1627,7 +1709,7 @@ void ofApp::mousePressed(int x, int y, int button) {
 
     // --- Mapping mode mouse ---
     if (mappingMode) {
-        auto* screen = scene.getScreen(scene.selectedIndex);
+        auto* screen = scene.getScreen(scene.getPrimarySelected());
         if (!screen) return;
 
         ofRectangle preview = getMapPreviewArea();
@@ -1676,32 +1758,49 @@ void ofApp::mousePressed(int x, int y, int button) {
         return;
     }
 
-    // Check gizmo hit first
-    if (scene.selectedIndex >= 0) {
-        ScreenObject* selected = scene.getScreen(scene.selectedIndex);
-        if (selected && gizmo.hitTest(cam, glm::vec2(x, y), *selected)) {
+    // Check gizmo hit first (use primary selected for gizmo reference)
+    if (scene.getPrimarySelected() >= 0) {
+        ScreenObject* primary = scene.getScreen(scene.getPrimarySelected());
+        if (primary && gizmo.hitTest(cam, glm::vec2(x, y), *primary)) {
             cam.disableMouseInput();
             gizmoInteracting = true;
-            gizmo.beginDrag(glm::vec2(x, y), cam, *selected);
+            pushUndo();
+            // Collect all selected screens as targets
+            std::vector<ScreenObject*> targets;
+            for (int si : scene.getSelectedIndicesSorted()) {
+                auto* s = scene.getScreen(si);
+                if (s) targets.push_back(s);
+            }
+            gizmo.beginDrag(glm::vec2(x, y), cam, *primary, targets);
             return;
         }
     }
 
     // Pick objects in scene
     int hit = scene.pick(cam, glm::vec2(x, y));
+#ifdef TARGET_OSX
+    bool multiKey = ofGetKeyPressed(OF_KEY_SUPER);
+#else
+    bool multiKey = ofGetKeyPressed(OF_KEY_CONTROL);
+#endif
     if (hit >= 0) {
-        scene.selectedIndex = hit;
-        propertiesPanel.setTarget(scene.getScreen(hit));
+        if (multiKey) {
+            scene.toggleSelected(hit);
+        } else {
+            scene.selectOnly(hit);
+        }
     } else {
-        scene.selectedIndex = -1;
-        propertiesPanel.setTarget(nullptr);
+        if (!multiKey) {
+            scene.clearSelection();
+        }
     }
+    updatePropertiesForSelection();
 }
 
 void ofApp::mouseDragged(int x, int y, int button) {
     // --- Mapping mode drag ---
     if (mappingMode && mapDrag != MapDrag::None) {
-        auto* screen = scene.getScreen(scene.selectedIndex);
+        auto* screen = scene.getScreen(scene.getPrimarySelected());
         if (!screen) return;
 
         ofRectangle preview = getMapPreviewArea();
@@ -1759,12 +1858,9 @@ void ofApp::mouseDragged(int x, int y, int button) {
 
     if (appMode != AppMode::Designer) return;
 
-    if (gizmoInteracting && scene.selectedIndex >= 0) {
-        ScreenObject* selected = scene.getScreen(scene.selectedIndex);
-        if (selected) {
-            gizmo.updateDrag(glm::vec2(x, y), cam, *selected);
-            propertiesPanel.syncFromTarget();
-        }
+    if (gizmoInteracting) {
+        gizmo.updateDrag(glm::vec2(x, y), cam);
+        propertiesPanel.syncFromTarget();
     }
 }
 
@@ -1785,4 +1881,21 @@ void ofApp::mouseReleased(int x, int y, int button) {
 
 void ofApp::windowResized(int w, int h) {
     propertiesPanel.setPosition(w - 240, 10);
+}
+
+// --- Helper methods ---
+
+void ofApp::pushUndo() {
+    undoManager.pushState(scene);
+}
+
+void ofApp::updatePropertiesForSelection() {
+    int count = scene.getSelectionCount();
+    if (count == 0) {
+        propertiesPanel.setTarget(nullptr);
+    } else if (count == 1) {
+        propertiesPanel.setTarget(scene.getScreen(scene.getPrimarySelected()));
+    } else {
+        propertiesPanel.setMultipleTargets(count);
+    }
 }

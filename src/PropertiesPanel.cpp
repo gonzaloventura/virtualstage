@@ -92,6 +92,8 @@ void PropertiesPanel::updateGroupVisibility(bool ambient, bool pos, bool rot, bo
 
 void PropertiesPanel::setTarget(ScreenObject* t) {
     target = t;
+    multiMode = false;
+    multiCount = 0;
     if (target) {
         nameLabel = target->name;
         sourceLabel = target->hasSource() ? target->sourceName : "None (1-9 to assign)";
@@ -100,6 +102,14 @@ void PropertiesPanel::setTarget(ScreenObject* t) {
         nameLabel = "None";
         sourceLabel = "None";
     }
+}
+
+void PropertiesPanel::setMultipleTargets(int count) {
+    target = nullptr;
+    multiMode = true;
+    multiCount = count;
+    nameLabel = "Multiple (" + ofToString(count) + ")";
+    sourceLabel = "---";
 }
 
 void PropertiesPanel::syncFromTarget() {
@@ -142,6 +152,8 @@ void PropertiesPanel::syncToTarget() {
 }
 
 void PropertiesPanel::onParamChanged(float& val) {
+    if (syncing) return;
+    if (onPropertyChanged) onPropertyChanged();
     syncToTarget();
 }
 

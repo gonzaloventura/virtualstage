@@ -129,24 +129,33 @@ bool Gizmo::hitTest(const ofCamera& cam, const glm::vec2& screenPos,
 }
 
 void Gizmo::beginDrag(const glm::vec2& screenPos, const ofCamera& cam,
-                      const ScreenObject& target) {
+                      const ScreenObject& primary,
+                      const std::vector<ScreenObject*>& allTargets) {
     dragging = true;
     dragStart = screenPos;
-    dragStartPos = target.getPosition();
-    dragStartRot = target.getRotationEuler();
-    dragStartScale = target.getScale();
+
+    dragTargets.clear();
+    for (auto* t : allTargets) {
+        if (!t) continue;
+        DragStartState state;
+        state.target = t;
+        state.startPos = t->getPosition();
+        state.startRot = t->getRotationEuler();
+        state.startScale = t->getScale();
+        dragTargets.push_back(state);
+    }
 }
 
-void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam,
-                       ScreenObject& target) {
-    if (!dragging || activeAxis == Axis::None) return;
+void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam) {
+    if (!dragging || activeAxis == Axis::None || dragTargets.empty()) return;
 
     glm::vec2 delta = screenPos - dragStart;
 
+    // Use the first target (primary) for screen-space projection reference
+    const auto& primaryState = dragTargets[0];
+
     if (mode == Mode::Translate) {
-        // Project the axis direction to screen space to determine which screen
-        // direction corresponds to the 3D axis
-        glm::vec3 pos = dragStartPos;
+        glm::vec3 pos = primaryState.startPos;
         glm::vec3 dir = getAxisDirection(activeAxis);
 
         glm::vec3 screenPos3D = cam.worldToScreen(pos);
@@ -154,45 +163,48 @@ void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam,
         glm::vec2 screenDir = glm::normalize(
             glm::vec2(screenAxisEnd.x - screenPos3D.x, screenAxisEnd.y - screenPos3D.y));
 
-        // Project mouse delta onto screen axis direction
         float projectedDelta = glm::dot(delta, screenDir);
-
-        // Scale factor: relate screen pixels to world units
         float worldScale = getGizmoSize(pos, cam) / 80.0f;
-        glm::vec3 newPos = dragStartPos + dir * projectedDelta * worldScale;
-        target.setPosition(newPos);
+        glm::vec3 worldDelta = dir * projectedDelta * worldScale;
+
+        for (auto& state : dragTargets) {
+            state.target->setPosition(state.startPos + worldDelta);
+        }
 
     } else if (mode == Mode::Rotate) {
-        // Horizontal mouse delta = rotation degrees
         float degrees = delta.x * 0.5f;
-        glm::vec3 newRot = dragStartRot;
 
-        switch (activeAxis) {
-            case Axis::X: newRot.x += degrees; break;
-            case Axis::Y: newRot.y += degrees; break;
-            case Axis::Z: newRot.z += degrees; break;
-            default: break;
+        for (auto& state : dragTargets) {
+            glm::vec3 newRot = state.startRot;
+            switch (activeAxis) {
+                case Axis::X: newRot.x += degrees; break;
+                case Axis::Y: newRot.y += degrees; break;
+                case Axis::Z: newRot.z += degrees; break;
+                default: break;
+            }
+            state.target->setRotationEuler(newRot);
         }
-        target.setRotationEuler(newRot);
 
     } else if (mode == Mode::Scale) {
-        // Horizontal mouse delta = scale factor
         float scaleDelta = delta.x * 0.005f;
-        glm::vec3 newScale = dragStartScale;
 
-        switch (activeAxis) {
-            case Axis::X: newScale.x = std::max(0.1f, dragStartScale.x + scaleDelta); break;
-            case Axis::Y: newScale.y = std::max(0.1f, dragStartScale.y + scaleDelta); break;
-            case Axis::Z: newScale.z = std::max(0.1f, dragStartScale.z + scaleDelta); break;
-            default: break;
+        for (auto& state : dragTargets) {
+            glm::vec3 newScale = state.startScale;
+            switch (activeAxis) {
+                case Axis::X: newScale.x = std::max(0.1f, state.startScale.x + scaleDelta); break;
+                case Axis::Y: newScale.y = std::max(0.1f, state.startScale.y + scaleDelta); break;
+                case Axis::Z: newScale.z = std::max(0.1f, state.startScale.z + scaleDelta); break;
+                default: break;
+            }
+            state.target->setScale(newScale);
         }
-        target.setScale(newScale);
     }
 }
 
 void Gizmo::endDrag() {
     dragging = false;
     activeAxis = Axis::None;
+    dragTargets.clear();
 }
 
 std::string Gizmo::getModeString() const {

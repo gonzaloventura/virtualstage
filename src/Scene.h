@@ -2,6 +2,7 @@
 #include "ofMain.h"
 #include "ScreenObject.h"
 #include <vector>
+#include <set>
 #include <memory>
 #include <functional>
 
@@ -57,7 +58,20 @@ public:
     bool saveProject(const std::string& path, const ofJson& cameraJson = ofJson()) const;
     bool loadProject(const std::string& path, ofJson* outCameraJson = nullptr);
 
-    int selectedIndex = -1;
+    // Reconnect all screens to their sources by name (used after undo/redo/load)
+    void reconnectSources();
+
+    // Multi-selection
+    std::set<int> selectedIndices;
+    int primarySelected = -1;
+
+    void selectOnly(int index);
+    void toggleSelected(int index);
+    void clearSelection();
+    bool isSelected(int index) const;
+    int getPrimarySelected() const;
+    int getSelectionCount() const;
+    std::vector<int> getSelectedIndicesSorted() const;
 
     // Callback when server list changes
     std::function<void()> onServerListChanged;

@@ -1,6 +1,7 @@
 #pragma once
 #include "ofMain.h"
 #include "ScreenObject.h"
+#include <vector>
 
 class Gizmo {
 public:
@@ -14,9 +15,9 @@ public:
                  const ScreenObject& target);
 
     void beginDrag(const glm::vec2& screenPos, const ofCamera& cam,
-                   const ScreenObject& target);
-    void updateDrag(const glm::vec2& screenPos, const ofCamera& cam,
-                    ScreenObject& target);
+                   const ScreenObject& primary,
+                   const std::vector<ScreenObject*>& allTargets);
+    void updateDrag(const glm::vec2& screenPos, const ofCamera& cam);
     void endDrag();
 
     bool isDragging() const { return dragging; }
@@ -34,7 +35,13 @@ private:
     Axis activeAxis = Axis::None;
     bool dragging = false;
     glm::vec2 dragStart;
-    glm::vec3 dragStartPos;
-    glm::vec3 dragStartRot;
-    glm::vec3 dragStartScale;
+
+    struct DragStartState {
+        ScreenObject* target;
+        glm::vec3 startPos;
+        glm::vec3 startRot;
+        glm::vec3 startScale;
+    };
+
+    std::vector<DragStartState> dragTargets;
 };

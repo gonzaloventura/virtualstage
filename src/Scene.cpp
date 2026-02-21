@@ -37,9 +37,11 @@ void Scene::draw(bool viewMode) {
         screen->draw(viewMode);
     }
 
-    // Draw selection highlight
-    if (selectedIndex >= 0 && selectedIndex < (int)screens.size()) {
-        screens[selectedIndex]->drawSelected();
+    // Draw selection highlight for all selected screens
+    for (int idx : selectedIndices) {
+        if (idx >= 0 && idx < (int)screens.size()) {
+            screens[idx]->drawSelected();
+        }
     }
 
     light.disable();
@@ -88,10 +90,24 @@ int Scene::addScreen(const std::string& name) {
 void Scene::removeScreen(int index) {
     if (index >= 0 && index < (int)screens.size()) {
         screens.erase(screens.begin() + index);
-        if (selectedIndex == index) {
-            selectedIndex = -1;
-        } else if (selectedIndex > index) {
-            selectedIndex--;
+
+        // Rebuild selectedIndices: remove the deleted index, shift down indices above it
+        std::set<int> newSelection;
+        for (int idx : selectedIndices) {
+            if (idx < index) {
+                newSelection.insert(idx);
+            } else if (idx > index) {
+                newSelection.insert(idx - 1);
+            }
+            // idx == index is removed
+        }
+        selectedIndices = newSelection;
+
+        // Update primarySelected
+        if (primarySelected == index) {
+            primarySelected = selectedIndices.empty() ? -1 : *selectedIndices.begin();
+        } else if (primarySelected > index) {
+            primarySelected--;
         }
     }
 }
@@ -236,7 +252,7 @@ bool Scene::loadProject(const std::string& path, ofJson* outCameraJson) {
 
     // Clear existing screens
     screens.clear();
-    selectedIndex = -1;
+    clearSelection();
     nextScreenId = 1;
 
     // Load camera if present
@@ -252,7 +268,13 @@ bool Scene::loadProject(const std::string& path, ofJson* outCameraJson) {
         nextScreenId++;
     }
 
-    // Try to reconnect sources by name
+    reconnectSources();
+
+    ofLogNotice("Scene") << "Loaded project: " << screens.size() << " screens from " << path;
+    return true;
+}
+
+void Scene::reconnectSources() {
 #ifdef TARGET_OSX
     const auto& serverList = directory.getServerList();
     for (auto& screen : screens) {
@@ -281,9 +303,6 @@ bool Scene::loadProject(const std::string& path, ofJson* outCameraJson) {
         }
     }
 #endif
-
-    ofLogNotice("Scene") << "Loaded project: " << screens.size() << " screens from " << path;
-    return true;
 }
 
 int Scene::pick(const ofCamera& cam, const glm::vec2& screenPos) {
@@ -328,4 +347,50 @@ bool Scene::rayIntersectsScreen(const glm::vec3& rayOrigin, const glm::vec3& ray
 
     return (std::abs(localHit.x) <= screen.getPlaneWidth() * 0.5f &&
             std::abs(localHit.y) <= screen.getPlaneHeight() * 0.5f);
+}
+
+// --- Multi-selection helpers ---
+
+void Scene::selectOnly(int index) {
+    selectedIndices.clear();
+    if (index >= 0 && index < (int)screens.size()) {
+        selectedIndices.insert(index);
+        primarySelected = index;
+    } else {
+        primarySelected = -1;
+    }
+}
+
+void Scene::toggleSelected(int index) {
+    if (index < 0 || index >= (int)screens.size()) return;
+    if (selectedIndices.count(index)) {
+        selectedIndices.erase(index);
+        if (primarySelected == index) {
+            primarySelected = selectedIndices.empty() ? -1 : *selectedIndices.begin();
+        }
+    } else {
+        selectedIndices.insert(index);
+        primarySelected = index;
+    }
+}
+
+void Scene::clearSelection() {
+    selectedIndices.clear();
+    primarySelected = -1;
+}
+
+bool Scene::isSelected(int index) const {
+    return selectedIndices.count(index) > 0;
+}
+
+int Scene::getPrimarySelected() const {
+    return primarySelected;
+}
+
+int Scene::getSelectionCount() const {
+    return (int)selectedIndices.size();
+}
+
+std::vector<int> Scene::getSelectedIndicesSorted() const {
+    return std::vector<int>(selectedIndices.begin(), selectedIndices.end());
 }

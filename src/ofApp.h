@@ -6,6 +6,7 @@
 #include "Scene.h"
 #include "Gizmo.h"
 #include "PropertiesPanel.h"
+#include "UndoManager.h"
 
 enum class AppMode { Designer, View };
 
@@ -80,6 +81,17 @@ private:
 
     // Interaction state
     bool gizmoInteracting = false;
+
+    // Undo/redo
+    UndoManager undoManager;
+    void pushUndo();
+
+    // Properties panel undo support
+    bool propsDirty = false;
+    float propsDirtyTimer = 0;
+
+    // Helper: update properties panel based on current selection
+    void updatePropertiesForSelection();
 
     // Project save/load
     std::string currentProjectPath;
