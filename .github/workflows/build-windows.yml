@@ -280,8 +280,13 @@ jobs:
             echo "WARNING: Syphon.framework not found at ${SYPHON_FW}"
           fi
 
-          # Ad-hoc code sign (required for macOS Gatekeeper on ARM)
-          codesign --force --deep -s - "${APP}"
+          # Ad-hoc code sign each component separately (--deep is deprecated)
+          # Sign embedded frameworks first, then the app
+          find "${APP}/Contents/Frameworks" -name '*.framework' -o -name '*.dylib' 2>/dev/null | while read fw; do
+            codesign --force -s - "$fw"
+            echo "Signed: $fw"
+          done
+          codesign --force -s - "${APP}"
           echo "Ad-hoc signed app bundle"
 
           cd "${BIN_DIR}" && zip -y -r "${GITHUB_WORKSPACE}/VirtualStage-macOS.zip" "$(basename "${APP}")"
@@ -311,3 +316,13 @@ jobs:
             VirtualStage-Windows/VirtualStage-Windows.zip
             VirtualStage-macOS/VirtualStage-macOS.zip
           generate_release_notes: true
+          body: |
+            ## Installation
+
+            **macOS:** After downloading, unzip and right-click the app → Open (first time only). If macOS says the app is damaged, open Terminal and run:
+            ```
+            xattr -cr /path/to/VirtualStage.app
+            ```
+            Then open the app normally.
+
+            **Windows:** Unzip and run `VirtualStage.exe`.
