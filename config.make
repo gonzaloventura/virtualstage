@@ -141,6 +141,13 @@ OF_ROOT = ../../..
 # PROJECT_CXX = 
 # PROJECT_CC = 
 
+################################################################################
+# PROJECT ICON (Windows / msys2)
+#   Path to the .ico file used as the executable icon on Windows.
+#   The OF build system compiles this into a COFF resource automatically.
+################################################################################
+PROJECT_RELEASE_ICON = $(PROJECT_ROOT)/icon.ico
+
 # osx template
 
 # Uncomment/comment below to switch between C++11 and C++17 ( or newer ). On macOS C++17 needs 10.15 or above.

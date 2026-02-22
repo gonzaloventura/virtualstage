@@ -133,23 +133,16 @@ jobs:
             echo "Created empty libboost_system-mt.a"
           fi
 
-      - name: Compile icon resource
-        run: |
-          cd "/d/of/${OF_ARCHIVE}/apps/myApps/VirtualStage"
-          windres icon.rc -o icon.res.o
-          echo "Compiled icon resource"
-
       - name: Build
         run: |
           export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig:/mingw64/share/pkgconfig"
           cd "/d/of/${OF_ARCHIVE}/apps/myApps/VirtualStage"
           # -mssse3: GCC 15 requires explicit SSSE3 flag for _mm_shuffle_epi8 used in SpoutCopy.cpp
-          # PROJECT_LDFLAGS: SpoutSDK uses #pragma comment(lib,...) which GCC ignores;
-          # manually link d3d11, dxgi, version, shell32, advapi32, winmm, comctl32
-          # icon.res.o: embed app icon into the executable
+          # PROJECT_LDFLAGS: SpoutSDK uses #pragma comment(lib,...) which GCC ignores
+          # Icon is handled by OF build system via PROJECT_RELEASE_ICON in config.make
           make Release -j$(nproc) \
             PROJECT_CFLAGS="-mssse3" \
-            PROJECT_LDFLAGS="icon.res.o -ld3d11 -ldxgi -lversion -lshell32 -ladvapi32 -lwinmm -lcomctl32"
+            PROJECT_LDFLAGS="-ld3d11 -ldxgi -lversion -lshell32 -ladvapi32 -lwinmm -lcomctl32"
 
       - name: Package artifact
         run: |
