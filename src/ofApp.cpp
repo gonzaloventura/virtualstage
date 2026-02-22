@@ -1,6 +1,10 @@
 #include "win_byte_fix.h"
 #include "ofApp.h"
 #include <GLFW/glfw3.h>
+// GLFW 3.3 (oF 0.12.0) doesn't have GLFW_RESIZE_ALL_CURSOR; define fallback
+#ifndef GLFW_RESIZE_ALL_CURSOR
+#define GLFW_RESIZE_ALL_CURSOR 0x00036009
+#endif
 #include "ofXml.h"
 #include <thread>
 #ifdef TARGET_OSX
