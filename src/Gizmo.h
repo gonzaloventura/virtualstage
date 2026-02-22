@@ -31,6 +31,8 @@ private:
     float getGizmoSize(const glm::vec3& pos, const ofCamera& cam) const;
     glm::vec3 getAxisDirection(Axis axis) const;
     ofColor getAxisColor(Axis axis, bool active) const;
+    float hitTestRing(const ofCamera& cam, const glm::vec2& screenPos,
+                      const glm::vec3& center, Axis axis, float radius) const;
 
     Axis activeAxis = Axis::None;
     bool dragging = false;

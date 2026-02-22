@@ -68,6 +68,8 @@ public:
     void selectOnly(int index);
     void toggleSelected(int index);
     void clearSelection();
+    void selectRange(int from, int to);
+    void selectInRect(const ofCamera& cam, const ofRectangle& screenRect);
     bool isSelected(int index) const;
     int getPrimarySelected() const;
     int getSelectionCount() const;

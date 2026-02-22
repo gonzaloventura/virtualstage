@@ -15,7 +15,7 @@ glm::vec3 Gizmo::getAxisDirection(Axis axis) const {
 }
 
 ofColor Gizmo::getAxisColor(Axis axis, bool active) const {
-    int brightness = active ? 255 : 180;
+    int brightness = active ? 255 : 140;
     switch (axis) {
         case Axis::X: return ofColor(brightness, 50, 50);
         case Axis::Y: return ofColor(50, brightness, 50);
@@ -24,21 +24,39 @@ ofColor Gizmo::getAxisColor(Axis axis, bool active) const {
     }
 }
 
+float Gizmo::hitTestRing(const ofCamera& cam, const glm::vec2& screenPos,
+                          const glm::vec3& center, Axis axis, float radius) const {
+    int segments = 48;
+    float minDist = 1e9f;
+    for (int i = 0; i < segments; i++) {
+        float angle = glm::two_pi<float>() * i / segments;
+        glm::vec3 p;
+        if (axis == Axis::X) p = glm::vec3(0, cos(angle) * radius, sin(angle) * radius);
+        else if (axis == Axis::Y) p = glm::vec3(cos(angle) * radius, 0, sin(angle) * radius);
+        else p = glm::vec3(cos(angle) * radius, sin(angle) * radius, 0);
+        glm::vec3 sp = cam.worldToScreen(center + p);
+        float dist = glm::distance(screenPos, glm::vec2(sp.x, sp.y));
+        if (dist < minDist) minDist = dist;
+    }
+    return minDist;
+}
+
 void Gizmo::draw(const ScreenObject& target, const ofCamera& cam) {
     glm::vec3 pos = target.getPosition();
     float size = getGizmoSize(pos, cam);
 
     ofPushStyle();
-    ofSetLineWidth(3);
 
     if (mode == Mode::Translate) {
         // Draw axis lines with arrow cones
         for (int a = 0; a < 3; a++) {
             Axis axis = static_cast<Axis>(a + 1);
+            bool active = (activeAxis == axis);
             glm::vec3 dir = getAxisDirection(axis);
             glm::vec3 end = pos + dir * size;
 
-            ofSetColor(getAxisColor(axis, activeAxis == axis));
+            ofSetLineWidth(active ? 5 : 2);
+            ofSetColor(getAxisColor(axis, active));
             ofDrawLine(pos, end);
 
             // Arrowhead
@@ -54,7 +72,9 @@ void Gizmo::draw(const ScreenObject& target, const ofCamera& cam) {
         int segments = 48;
         for (int a = 0; a < 3; a++) {
             Axis axis = static_cast<Axis>(a + 1);
-            ofSetColor(getAxisColor(axis, activeAxis == axis));
+            bool active = (activeAxis == axis);
+            ofSetLineWidth(active ? 5 : 2);
+            ofSetColor(getAxisColor(axis, active));
 
             ofPolyline ring;
             for (int i = 0; i <= segments; i++) {
@@ -72,10 +92,12 @@ void Gizmo::draw(const ScreenObject& target, const ofCamera& cam) {
         // Draw axis lines with cubes at the ends
         for (int a = 0; a < 3; a++) {
             Axis axis = static_cast<Axis>(a + 1);
+            bool active = (activeAxis == axis);
             glm::vec3 dir = getAxisDirection(axis);
             glm::vec3 end = pos + dir * size;
 
-            ofSetColor(getAxisColor(axis, activeAxis == axis));
+            ofSetLineWidth(active ? 5 : 2);
+            ofSetColor(getAxisColor(axis, active));
             ofDrawLine(pos, end);
 
             // Scale cube
@@ -97,31 +119,43 @@ bool Gizmo::hitTest(const ofCamera& cam, const glm::vec2& screenPos,
     activeAxis = Axis::None;
     float bestDist = threshold;
 
-    for (int a = 0; a < 3; a++) {
-        Axis axis = static_cast<Axis>(a + 1);
-        glm::vec3 dir = getAxisDirection(axis);
-        glm::vec3 end = pos + dir * size;
+    if (mode == Mode::Rotate) {
+        // Ring-based hit detection for rotation mode
+        float ringRadius = size * 0.8f;
+        for (int a = 0; a < 3; a++) {
+            Axis axis = static_cast<Axis>(a + 1);
+            float dist = hitTestRing(cam, screenPos, pos, axis, ringRadius);
+            if (dist < bestDist) {
+                bestDist = dist;
+                activeAxis = axis;
+            }
+        }
+    } else {
+        // Line-segment hit detection for Translate/Scale
+        for (int a = 0; a < 3; a++) {
+            Axis axis = static_cast<Axis>(a + 1);
+            glm::vec3 dir = getAxisDirection(axis);
+            glm::vec3 end = pos + dir * size;
 
-        // Project to screen
-        glm::vec3 screenStart = cam.worldToScreen(pos);
-        glm::vec3 screenEnd = cam.worldToScreen(end);
+            glm::vec3 screenStart = cam.worldToScreen(pos);
+            glm::vec3 screenEnd = cam.worldToScreen(end);
 
-        // Distance from point to line segment in 2D
-        glm::vec2 a2d(screenStart.x, screenStart.y);
-        glm::vec2 b2d(screenEnd.x, screenEnd.y);
-        glm::vec2 p(screenPos.x, screenPos.y);
+            glm::vec2 a2d(screenStart.x, screenStart.y);
+            glm::vec2 b2d(screenEnd.x, screenEnd.y);
+            glm::vec2 p(screenPos.x, screenPos.y);
 
-        glm::vec2 ab = b2d - a2d;
-        float len2 = glm::dot(ab, ab);
-        if (len2 < 1.0f) continue;
+            glm::vec2 ab = b2d - a2d;
+            float len2 = glm::dot(ab, ab);
+            if (len2 < 1.0f) continue;
 
-        float t = glm::clamp(glm::dot(p - a2d, ab) / len2, 0.0f, 1.0f);
-        glm::vec2 closest = a2d + ab * t;
-        float dist = glm::distance(p, closest);
+            float t = glm::clamp(glm::dot(p - a2d, ab) / len2, 0.0f, 1.0f);
+            glm::vec2 closest = a2d + ab * t;
+            float dist = glm::distance(p, closest);
 
-        if (dist < bestDist) {
-            bestDist = dist;
-            activeAxis = axis;
+            if (dist < bestDist) {
+                bestDist = dist;
+                activeAxis = axis;
+            }
         }
     }
 

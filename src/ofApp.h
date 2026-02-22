@@ -3,6 +3,7 @@
 #include "ofMain.h"
 #include "ofxGui.h"
 #include "ofAppGLFWWindow.h"
+#include <GLFW/glfw3.h>
 #include "Scene.h"
 #include "Gizmo.h"
 #include "PropertiesPanel.h"
@@ -53,6 +54,7 @@ private:
     float menuBarHeight = 25.0f;
     bool fileMenuOpen = false;
     bool viewMenuOpen = false;
+    bool linkMenuOpen = false;
     bool helpMenuOpen = false;
     void drawMenuBar();
     bool handleMenuClick(int x, int y); // returns true if click was consumed
@@ -84,6 +86,22 @@ private:
 
     // Interaction state
     bool gizmoInteracting = false;
+
+    // Cursor feedback for middle-click panning
+    GLFWcursor* handCursor = nullptr;
+    GLFWcursor* crosshairCursor = nullptr;
+    bool middleMouseDown = false;
+
+    // Select mode (S key toggle) — enables box selection with left-drag
+    bool selectMode = false;
+
+    // Box selection (left-drag on empty 3D space while in select mode)
+    bool boxSelecting = false;
+    glm::vec2 boxSelectStart;
+    glm::vec2 boxSelectEnd;
+
+    // Sidebar shift-click range selection
+    int lastClickedSidebarIndex = -1;
 
     // Undo/redo
     UndoManager undoManager;

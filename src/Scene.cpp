@@ -379,6 +379,27 @@ void Scene::clearSelection() {
     primarySelected = -1;
 }
 
+void Scene::selectRange(int from, int to) {
+    int lo = std::min(from, to);
+    int hi = std::max(from, to);
+    selectedIndices.clear();
+    for (int i = lo; i <= hi && i < (int)screens.size(); i++) {
+        if (i >= 0) selectedIndices.insert(i);
+    }
+    primarySelected = to;
+}
+
+void Scene::selectInRect(const ofCamera& cam, const ofRectangle& screenRect) {
+    clearSelection();
+    for (int i = 0; i < (int)screens.size(); i++) {
+        glm::vec3 sp = cam.worldToScreen(screens[i]->getPosition());
+        if (screenRect.inside(sp.x, sp.y)) {
+            selectedIndices.insert(i);
+            if (primarySelected < 0) primarySelected = i;
+        }
+    }
+}
+
 bool Scene::isSelected(int index) const {
     return selectedIndices.count(index) > 0;
 }

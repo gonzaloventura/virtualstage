@@ -33,6 +33,10 @@ void ofApp::setup() {
         }
     };
 
+    // Cursors
+    handCursor = glfwCreateStandardCursor(GLFW_RESIZE_ALL_CURSOR);
+    crosshairCursor = glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR);
+
     // Push initial undo state
     undoManager.pushState(scene);
 }
@@ -111,6 +115,21 @@ void ofApp::draw() {
     // Context menu (drawn on top of everything except menu bar)
     if (contextMenuOpen) {
         drawContextMenu();
+    }
+
+    // Box selection overlay
+    if (boxSelecting) {
+        ofRectangle r(boxSelectStart.x, boxSelectStart.y,
+                      boxSelectEnd.x - boxSelectStart.x,
+                      boxSelectEnd.y - boxSelectStart.y);
+        r.standardize();
+        ofSetColor(80, 160, 255, 50);
+        ofFill();
+        ofDrawRectangle(r);
+        ofNoFill();
+        ofSetColor(80, 160, 255, 200);
+        ofDrawRectangle(r);
+        ofFill();
     }
 
     // Hide menu bar in View mode for clean look
@@ -318,17 +337,22 @@ bool ofApp::handleSidebarClick(int x, int y) {
                 return true;
             }
 
-            // Click on row — Cmd/Ctrl toggles, plain click selects only
+            // Click on row — Shift=range, Cmd/Ctrl=toggle, plain=select only
 #ifdef TARGET_OSX
             bool multiKey = ofGetKeyPressed(OF_KEY_SUPER);
 #else
             bool multiKey = ofGetKeyPressed(OF_KEY_CONTROL);
 #endif
-            if (multiKey) {
+            bool shiftKey = ofGetKeyPressed(OF_KEY_SHIFT);
+
+            if (shiftKey && lastClickedSidebarIndex >= 0) {
+                scene.selectRange(lastClickedSidebarIndex, i);
+            } else if (multiKey) {
                 scene.toggleSelected(i);
             } else {
                 scene.selectOnly(i);
             }
+            lastClickedSidebarIndex = i;
             updatePropertiesForSelection();
             return true;
         }
@@ -426,12 +450,17 @@ void ofApp::drawStatusBar() {
             ofSetColor(255, 200, 0);
             hint = "Use rects from Resolume:  I:Input  O:Output  Esc:Cancel";
         } else {
-            hint = gizmo.getModeString() +
+            if (selectMode) {
+                ofSetColor(0, 200, 255);
+                hint = "SELECT  |  Drag to select  |  S:Exit  W/E/R:Exit";
+            } else {
+                hint = gizmo.getModeString() +
 #ifdef TARGET_OSX
-                "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  Cmd+Z:Undo  Cmd+S/O:Save/Open";
+                    "  |  S:Select  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  Cmd+Z:Undo  Cmd+S/O:Save/Open";
 #else
-                "  |  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  Ctrl+Z:Undo  Ctrl+S/O:Save/Open";
+                    "  |  S:Select  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  Ctrl+Z:Undo  Ctrl+S/O:Save/Open";
 #endif
+            }
         }
         ofDrawBitmapString(hint, ofGetWidth() - hint.length() * 8 - 10, barY + 20);
     }
@@ -589,8 +618,19 @@ void ofApp::drawMenuBar() {
     ofSetColor(220);
     ofDrawBitmapString("View", viewX, menuBarHeight - 7);
 
+    // Link button
+    float linkX = viewX + viewW + 15, linkW = 32;
+    bool linkHover = (ofGetMouseX() >= linkX - 5 && ofGetMouseX() <= linkX + linkW + 5 &&
+                      ofGetMouseY() >= 0 && ofGetMouseY() <= menuBarHeight);
+    if (linkMenuOpen || linkHover) {
+        ofSetColor(70, 70, 70);
+        ofDrawRectangle(linkX - 5, 0, linkW + 10, menuBarHeight);
+    }
+    ofSetColor(220);
+    ofDrawBitmapString("Link", linkX, menuBarHeight - 7);
+
     // Help button
-    float helpX = viewX + viewW + 15, helpW = 40;
+    float helpX = linkX + linkW + 15, helpW = 40;
     bool helpHover = (ofGetMouseX() >= helpX - 5 && ofGetMouseX() <= helpX + helpW + 5 &&
                       ofGetMouseY() >= 0 && ofGetMouseY() <= menuBarHeight);
     if (helpMenuOpen || helpHover) {
@@ -636,6 +676,15 @@ void ofApp::drawMenuBar() {
         drawDropdown(viewX - 5, menuBarHeight, 200, items);
     }
 
+    // Link dropdown
+    if (linkMenuOpen) {
+        std::vector<std::tuple<std::string, std::string, bool, bool, bool>> items = {
+            {"Input",  "L L I", false, false, false},
+            {"Output", "L L O", false, false, false},
+        };
+        drawDropdown(linkX - 5, menuBarHeight, 180, items);
+    }
+
     // Help dropdown
     if (helpMenuOpen) {
         std::vector<std::tuple<std::string, std::string, bool, bool, bool>> items = {
@@ -654,12 +703,14 @@ bool ofApp::handleMenuClick(int x, int y) {
     float viewX = fileX + fileW + 15, viewW = 42;
     float itemH = 24;
 
-    float helpX = viewX + viewW + 15, helpW = 40;
+    float linkX = viewX + viewW + 15, linkW = 32;
+    float helpX = linkX + linkW + 15, helpW = 40;
 
     // Click on "File" button
     if (x >= fileX - 5 && x <= fileX + fileW + 5 && y >= 0 && y <= menuBarHeight) {
         fileMenuOpen = !fileMenuOpen;
         viewMenuOpen = false;
+        linkMenuOpen = false;
         helpMenuOpen = false;
         contextMenuOpen = false;
         return true;
@@ -669,6 +720,17 @@ bool ofApp::handleMenuClick(int x, int y) {
     if (x >= viewX - 5 && x <= viewX + viewW + 5 && y >= 0 && y <= menuBarHeight) {
         viewMenuOpen = !viewMenuOpen;
         fileMenuOpen = false;
+        linkMenuOpen = false;
+        helpMenuOpen = false;
+        contextMenuOpen = false;
+        return true;
+    }
+
+    // Click on "Link" button
+    if (x >= linkX - 5 && x <= linkX + linkW + 5 && y >= 0 && y <= menuBarHeight) {
+        linkMenuOpen = !linkMenuOpen;
+        fileMenuOpen = false;
+        viewMenuOpen = false;
         helpMenuOpen = false;
         contextMenuOpen = false;
         return true;
@@ -679,6 +741,7 @@ bool ofApp::handleMenuClick(int x, int y) {
         helpMenuOpen = !helpMenuOpen;
         fileMenuOpen = false;
         viewMenuOpen = false;
+        linkMenuOpen = false;
         contextMenuOpen = false;
         return true;
     }
@@ -700,7 +763,14 @@ bool ofApp::handleMenuClick(int x, int y) {
                         case 1: openProject(); break;
                         case 2: saveProject(false); break;
                         case 3: saveProject(true); break;
-                        case 5: autosaveEnabled = !autosaveEnabled; autosaveTimer = 0; break;
+                        case 5:
+                            if (!autosaveEnabled && currentProjectPath.empty()) {
+                                saveProject(false);
+                                if (currentProjectPath.empty()) break; // user cancelled
+                            }
+                            autosaveEnabled = !autosaveEnabled;
+                            autosaveTimer = 0;
+                            break;
                         case 7: ofExit(); break;
                     }
                     return true;
@@ -740,6 +810,30 @@ bool ofApp::handleMenuClick(int x, int y) {
             }
         }
         viewMenuOpen = false;
+        return true;
+    }
+
+    // Link dropdown clicks
+    if (linkMenuOpen) {
+        float dropX = linkX - 5, dropW = 180;
+        // items: Input, Output
+        int totalL = 2;
+        float iy = menuBarHeight;
+
+        if (x >= dropX && x <= dropX + dropW) {
+            for (int i = 0; i < totalL; i++) {
+                if (y >= iy && y < iy + itemH) {
+                    linkMenuOpen = false;
+                    switch (i) {
+                        case 0: loadResolumeXml(true); break;   // Input
+                        case 1: loadResolumeXml(false); break;  // Output
+                    }
+                    return true;
+                }
+                iy += itemH;
+            }
+        }
+        linkMenuOpen = false;
         return true;
     }
 
@@ -1071,9 +1165,10 @@ void ofApp::openProject() {
 
 void ofApp::keyPressed(int key) {
     // Close menus on any key press
-    if (fileMenuOpen || viewMenuOpen || helpMenuOpen || contextMenuOpen) {
+    if (fileMenuOpen || viewMenuOpen || linkMenuOpen || helpMenuOpen || contextMenuOpen) {
         fileMenuOpen = false;
         viewMenuOpen = false;
+        linkMenuOpen = false;
         helpMenuOpen = false;
         contextMenuOpen = false;
         if (key == OF_KEY_ESC) return; // ESC just closes the menu
@@ -1293,9 +1388,45 @@ void ofApp::keyPressed(int key) {
             }
             break;
 
-        case 'w': gizmo.mode = Gizmo::Mode::Translate; break;
-        case 'e': gizmo.mode = Gizmo::Mode::Rotate; break;
-        case 'r': gizmo.mode = Gizmo::Mode::Scale; break;
+        case 'w':
+            gizmo.mode = Gizmo::Mode::Translate;
+            if (selectMode) {
+                selectMode = false;
+                cam.enableMouseInput();
+                glfwSetCursor(static_cast<ofAppGLFWWindow*>(ofGetWindowPtr())->getGLFWWindow(), nullptr);
+            }
+            break;
+        case 'e':
+            gizmo.mode = Gizmo::Mode::Rotate;
+            if (selectMode) {
+                selectMode = false;
+                cam.enableMouseInput();
+                glfwSetCursor(static_cast<ofAppGLFWWindow*>(ofGetWindowPtr())->getGLFWWindow(), nullptr);
+            }
+            break;
+        case 'r':
+            gizmo.mode = Gizmo::Mode::Scale;
+            if (selectMode) {
+                selectMode = false;
+                cam.enableMouseInput();
+                glfwSetCursor(static_cast<ofAppGLFWWindow*>(ofGetWindowPtr())->getGLFWWindow(), nullptr);
+            }
+            break;
+
+        case 's': {
+            selectMode = !selectMode;
+            auto* win = static_cast<ofAppGLFWWindow*>(ofGetWindowPtr())->getGLFWWindow();
+            if (selectMode) {
+                cam.disableMouseInput();
+                glfwSetCursor(win, crosshairCursor);
+            } else {
+                glfwSetCursor(win, nullptr);
+                if (!(appMode == AppMode::View && cameraLocked)) {
+                    cam.enableMouseInput();
+                }
+            }
+            break;
+        }
 
         case 'h': case 'H':
             showUI = !showUI;
@@ -1791,6 +1922,14 @@ void ofApp::mousePressed(int x, int y, int button) {
         return;
     }
 
+    // Middle-click: show hand cursor for panning
+    if (button == OF_MOUSE_BUTTON_MIDDLE) {
+        middleMouseDown = true;
+        auto* win = static_cast<ofAppGLFWWindow*>(ofGetWindowPtr())->getGLFWWindow();
+        glfwSetCursor(win, handCursor);
+        return;
+    }
+
     if (button != OF_MOUSE_BUTTON_LEFT) return;
 
     // Context menu click
@@ -1897,12 +2036,23 @@ void ofApp::mousePressed(int x, int y, int button) {
         } else {
             scene.selectOnly(hit);
         }
+        updatePropertiesForSelection();
     } else {
         if (!multiKey) {
-            scene.clearSelection();
+            if (selectMode) {
+                // Select mode: start box selection
+                cam.disableMouseInput();
+                boxSelecting = true;
+                boxSelectStart = boxSelectEnd = glm::vec2(x, y);
+                auto* win = static_cast<ofAppGLFWWindow*>(ofGetWindowPtr())->getGLFWWindow();
+                glfwSetCursor(win, crosshairCursor);
+            } else {
+                // Normal mode: clear selection, let camera orbit
+                scene.clearSelection();
+                updatePropertiesForSelection();
+            }
         }
     }
-    updatePropertiesForSelection();
 }
 
 void ofApp::mouseDragged(int x, int y, int button) {
@@ -1966,6 +2116,12 @@ void ofApp::mouseDragged(int x, int y, int button) {
 
     if (appMode != AppMode::Designer) return;
 
+    // Box selection drag
+    if (boxSelecting) {
+        boxSelectEnd = glm::vec2(x, y);
+        return;
+    }
+
     if (gizmoInteracting) {
         gizmo.updateDrag(glm::vec2(x, y), cam);
         propertiesPanel.syncFromTarget();
@@ -1973,6 +2129,41 @@ void ofApp::mouseDragged(int x, int y, int button) {
 }
 
 void ofApp::mouseReleased(int x, int y, int button) {
+    // Restore cursor when middle-click released
+    if (button == OF_MOUSE_BUTTON_MIDDLE && middleMouseDown) {
+        middleMouseDown = false;
+        auto* win = static_cast<ofAppGLFWWindow*>(ofGetWindowPtr())->getGLFWWindow();
+        glfwSetCursor(win, nullptr);
+    }
+
+    // Box selection release
+    if (button == OF_MOUSE_BUTTON_LEFT && boxSelecting) {
+        boxSelecting = false;
+
+        ofRectangle r(boxSelectStart.x, boxSelectStart.y,
+                      boxSelectEnd.x - boxSelectStart.x,
+                      boxSelectEnd.y - boxSelectStart.y);
+        r.standardize();
+
+        if (r.getArea() < 25.0f) {
+            // Tiny drag = click on empty space → clear selection
+            scene.clearSelection();
+        } else {
+            scene.selectInRect(cam, r);
+        }
+
+        // Stay in select mode — keep crosshair and camera disabled
+        if (!selectMode) {
+            auto* win = static_cast<ofAppGLFWWindow*>(ofGetWindowPtr())->getGLFWWindow();
+            glfwSetCursor(win, nullptr);
+            if (!(appMode == AppMode::View && cameraLocked)) {
+                cam.enableMouseInput();
+            }
+        }
+        updatePropertiesForSelection();
+        return;
+    }
+
     if (mappingMode) {
         mapDrag = MapDrag::None;
         return;
@@ -2004,7 +2195,12 @@ void ofApp::updatePropertiesForSelection() {
     } else if (count == 1) {
         propertiesPanel.setTarget(scene.getScreen(scene.getPrimarySelected()));
     } else {
-        propertiesPanel.setMultipleTargets(count);
+        std::vector<ScreenObject*> targets;
+        for (int idx : scene.getSelectedIndicesSorted()) {
+            auto* s = scene.getScreen(idx);
+            if (s) targets.push_back(s);
+        }
+        propertiesPanel.setMultipleTargets(targets);
     }
 }
 
@@ -2027,23 +2223,48 @@ void ofApp::checkForUpdates() {
     showUpdateModal = true;
 
     std::thread([this]() {
-        ofHttpRequest req;
-        req.url = "https://api.github.com/repos/gonzaloventura/virtualstage/releases/latest";
-        req.headers["User-Agent"] = "VirtualStage/" APP_VERSION;
-        req.headers["Accept"] = "application/vnd.github.v3+json";
-
-        ofURLFileLoader loader;
-        auto response = loader.handleRequest(req);
-
-        if (response.status != 200) {
+        // Write response to temp file using system-level HTTP tools
+        // (ofURLFileLoader local instance doesn't initialize curl properly on Windows)
+        std::string tmpPath = ofFilePath::join(ofFilePath::getUserHomeDir(), ".virtualstage_update_check.json");
+        int ret = -1;
+#ifdef TARGET_OSX
+        std::string cmd = "curl -s -H \"User-Agent: VirtualStage/" APP_VERSION "\" "
+                          "-H \"Accept: application/vnd.github.v3+json\" "
+                          "\"https://api.github.com/repos/gonzaloventura/virtualstage/releases/latest\" "
+                          "-o \"" + tmpPath + "\"";
+        ret = system(cmd.c_str());
+#elif defined(TARGET_WIN32)
+        std::string cmd = "powershell -NoProfile -Command \"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; "
+                          "Invoke-RestMethod -Uri 'https://api.github.com/repos/gonzaloventura/virtualstage/releases/latest' "
+                          "-Headers @{'User-Agent'='VirtualStage/" APP_VERSION "'} "
+                          "| ConvertTo-Json -Depth 10 | Out-File -Encoding utf8 '" + tmpPath + "'\"";
+        ret = system(cmd.c_str());
+#endif
+        if (ret != 0) {
             updateState = UpdateState::Error;
-            updateErrorDetail = "HTTP " + ofToString(response.status);
-            ofLogError("Update") << "HTTP " << response.status;
+            updateErrorDetail = "Could not reach GitHub";
+            return;
+        }
+
+        // Read the temp file
+        ofFile f(tmpPath);
+        if (!f.exists()) {
+            updateState = UpdateState::Error;
+            updateErrorDetail = "No response received";
+            return;
+        }
+        ofBuffer buf = ofBufferFromFile(tmpPath);
+        std::string body = buf.getText();
+        ofFile::removeFile(tmpPath);
+
+        if (body.empty()) {
+            updateState = UpdateState::Error;
+            updateErrorDetail = "Empty response";
             return;
         }
 
         try {
-            ofJson json = ofJson::parse(response.data);
+            ofJson json = ofJson::parse(body);
 
             std::string tag = json.value("tag_name", "");
             if (tag.empty()) {
@@ -2291,7 +2512,7 @@ void ofApp::drawAboutDialog() {
 
     // Panel
     float panelW = 340;
-    float panelH = 175;
+    float panelH = 195;
     float px = (w - panelW) / 2;
     float py = (h - panelH) / 2;
 
@@ -2332,7 +2553,7 @@ void ofApp::drawAboutDialog() {
     ofSetColor(140);
     ofDrawBitmapString("Built by Gonzalo Ventura", px + 30, py + 135);
     ofSetColor(0, 180, 255);
-    ofDrawBitmapString("Ventu.dev", px + 30 + 24 * 8, py + 135);
+    ofDrawBitmapString("Ventu.dev", px + 30, py + 153);
 
     // Close hint
     ofSetColor(100);

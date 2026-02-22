@@ -11,7 +11,7 @@ public:
     void draw();
 
     void setTarget(ScreenObject* target);
-    void setMultipleTargets(int count);
+    void setMultipleTargets(const std::vector<ScreenObject*>& targets);
     void syncFromTarget();
     void syncToTarget();
 
@@ -62,10 +62,17 @@ private:
     ofxLabel sourceLabel;
 
     ScreenObject* target = nullptr;
+    std::vector<ScreenObject*> multiTargets;
     bool visible = true;
     bool syncing = false;
     bool multiMode = false;
     int multiCount = 0;
+
+    // Delta tracking for multi-target editing
+    glm::vec3 lastPos;
+    glm::vec3 lastRot;
+    glm::vec2 lastScale;
+    float lastCurvature = 0;
 
     // Group visibility flags
     bool visAmbient = false;
@@ -76,4 +83,6 @@ private:
 
     void onParamChanged(float& val);
     void onAmbientReset(bool& val);
+    void captureLastValues();
+    void syncToMultiTargets();
 };
