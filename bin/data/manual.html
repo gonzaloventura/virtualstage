@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VirtualStage - User Manual</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --bg2: #16213e;
+    --bg3: #0f3460;
+    --accent: #00c8ff;
+    --accent2: #e94560;
+    --text: #e0e0e0;
+    --text2: #a0a0a0;
+    --border: #2a2a4a;
+    --card: #1e1e3a;
+    --green: #00dc82;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 15px;
+  }
+  .lang-toggle {
+    position: fixed;
+    top: 16px;
+    right: 24px;
+    z-index: 100;
+    display: flex;
+    gap: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+  }
+  .lang-toggle button {
+    padding: 8px 18px;
+    border: none;
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .lang-toggle button.active {
+    background: var(--accent);
+    color: #000;
+  }
+  .lang-toggle button:hover:not(.active) {
+    background: var(--border);
+    color: var(--text);
+  }
+  header {
+    background: linear-gradient(135deg, var(--bg2), var(--bg3));
+    padding: 60px 40px 40px;
+    text-align: center;
+    border-bottom: 2px solid var(--accent);
+  }
+  header h1 {
+    font-size: 2.4em;
+    color: var(--accent);
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+  }
+  header p {
+    color: var(--text2);
+    font-size: 1.1em;
+  }
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+  nav {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 32px;
+    margin-bottom: 40px;
+  }
+  nav h2 {
+    color: var(--accent);
+    font-size: 1.1em;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  nav ol {
+    columns: 2;
+    column-gap: 32px;
+    padding-left: 20px;
+  }
+  nav li {
+    margin-bottom: 6px;
+    break-inside: avoid;
+  }
+  nav a {
+    color: var(--text2);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  nav a:hover { color: var(--accent); }
+  section {
+    margin-bottom: 48px;
+  }
+  h2 {
+    color: var(--accent);
+    font-size: 1.6em;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    color: var(--green);
+    font-size: 1.15em;
+    margin: 24px 0 10px;
+  }
+  p { margin-bottom: 12px; }
+  ul, ol { margin-bottom: 12px; padding-left: 24px; }
+  li { margin-bottom: 4px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  th {
+    background: var(--bg3);
+    color: var(--accent);
+    text-align: left;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    font-weight: 600;
+  }
+  td {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+  }
+  tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+  code {
+    background: var(--bg2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.9em;
+    color: var(--accent);
+  }
+  pre {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  pre code { background: none; padding: 0; }
+  kbd {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-family: inherit;
+    font-size: 0.85em;
+    color: var(--accent);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .diagram {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 16px 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    white-space: pre;
+    overflow-x: auto;
+    color: var(--text2);
+  }
+  .tip {
+    background: rgba(0, 200, 255, 0.08);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px;
+    border-radius: 0 8px 8px 0;
+    margin: 16px 0;
+  }
+  .tip::before {
+    content: 'Tip';
+    display: block;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .hidden { display: none !important; }
+  @media (max-width: 600px) {
+    nav ol { columns: 1; }
+    header { padding: 40px 20px 30px; }
+    header h1 { font-size: 1.8em; }
+    .container { padding: 24px 16px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="lang-toggle">
+  <button id="btn-en" class="active" onclick="setLang('en')">EN</button>
+  <button id="btn-es" onclick="setLang('es')">ES</button>
+</div>
+
+<!-- ===== ENGLISH ===== -->
+<div id="lang-en">
+
+<header>
+  <h1>VirtualStage</h1>
+  <p>User Manual</p>
+</header>
+
+<div class="container">
+
+<nav>
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#en-what">What is VirtualStage</a></li>
+    <li><a href="#en-install">Installation</a></li>
+    <li><a href="#en-start">Getting Started</a></li>
+    <li><a href="#en-interface">Interface</a></li>
+    <li><a href="#en-modes">Work Modes</a></li>
+    <li><a href="#en-screens">Virtual Screens</a></li>
+    <li><a href="#en-transform">Transforming Screens</a></li>
+    <li><a href="#en-sources">Video Sources</a></li>
+    <li><a href="#en-mapping">Input Mapping Editor</a></li>
+    <li><a href="#en-resolume">Import from Resolume</a></li>
+    <li><a href="#en-camera">Camera Navigation</a></li>
+    <li><a href="#en-projects">Projects</a></li>
+    <li><a href="#en-cloud">Cloud Storage</a></li>
+    <li><a href="#en-prefs">Preferences</a></li>
+    <li><a href="#en-updates">Updates</a></li>
+    <li><a href="#en-keys">Keyboard Shortcuts</a></li>
+    <li><a href="#en-mouse">Mouse Controls</a></li>
+  </ol>
+</nav>
+
+<section id="en-what">
+  <h2>What is VirtualStage</h2>
+  <p>VirtualStage is a 3D visualization tool for designing LED screen and projection surface layouts. It lets you create, position, rotate and scale multiple screens in a 3D space, and receive real-time video from applications like Resolume Arena via Syphon (macOS) or Spout (Windows).</p>
+  <h3>Use Cases</h3>
+  <ul>
+    <li>Previewing stage setups with LED screens before the actual build</li>
+    <li>Designing multi-screen layouts for live shows</li>
+    <li>Testing video content across different screen configurations</li>
+    <li>Directly importing Resolume Advanced Output presets</li>
+  </ul>
+</section>
+
+<section id="en-install">
+  <h2>Installation</h2>
+  <h3>macOS</h3>
+  <ol>
+    <li>Download <code>VirtualStage-macOS.zip</code> from the releases page</li>
+    <li>Unzip the file</li>
+    <li>Right-click the app and select <strong>Open</strong> (first time only)</li>
+    <li>If macOS says the app is damaged, open Terminal and run:
+      <pre><code>xattr -cr /path/to/VirtualStage.app</code></pre>
+    </li>
+    <li>Open the app normally</li>
+  </ol>
+  <h3>Windows</h3>
+  <ol>
+    <li>Download <code>VirtualStage-Windows.zip</code> from the releases page</li>
+    <li>Unzip to your desired folder</li>
+    <li>Run <code>VirtualStage.exe</code></li>
+  </ol>
+</section>
+
+<section id="en-start">
+  <h2>Getting Started</h2>
+  <p>On first launch, an authentication screen appears where you can:</p>
+  <ul>
+    <li><strong>Sign in</strong> with an existing email and password</li>
+    <li><strong>Register a new account</strong> (email confirmation required)</li>
+  </ul>
+  <p>Your account enables cloud project saving and preference syncing across devices.</p>
+  <p>Once authenticated, the editor opens with a default virtual screen in the center of the scene.</p>
+</section>
+
+<section id="en-interface">
+  <h2>Interface</h2>
+  <div class="diagram">+-------------------------------------------------------+
+|  File  View  Link  Help   [Autosave ON]               |  Menu Bar
++----------+--------------------------------------------+
+|          |                                            |
+| SCREENS  |                                            |
+|  Screen1 |           3D Viewport                      |
+|  Screen2 |                                            |
+|          |                                            |
+|----------|                                            |
+| SERVERS  |                                            |
+|  Source1  |                                            |
+|  Source2  |         [W] Move  [E] Rotate  [R] Scale   |  Toolbar
++----------+--------------------------------------------+
+| DESIGNER | project.json | FPS: 60 | Servers: 2 | ... |  Status Bar
++-------------------------------------------------------+</div>
+
+  <h3>Menu Bar</h3>
+  <ul>
+    <li><strong>File</strong>: New, Open, Save, Save As, Cloud Save/Load, Autosave, Preferences, Log Out, Quit</li>
+    <li><strong>View</strong>: Show/hide properties panel sections (Ambient Light, Position, Rotation, Size, Input Mapping)</li>
+    <li><strong>Link</strong>: Import layout from Resolume (Input or Output)</li>
+    <li><strong>Help</strong>: Manual, Check for Updates, About</li>
+  </ul>
+
+  <h3>Sidebar (Left Panel)</h3>
+  <ul>
+    <li><strong>SCREENS</strong>: All project screens. Click to select, <code>[X]</code> to delete</li>
+    <li><strong>SERVERS</strong>: Available video sources (Syphon/Spout). Click a server to assign it to the selected screen</li>
+  </ul>
+  <p>The sidebar scrolls if the content exceeds the window height.</p>
+
+  <h3>3D Viewport</h3>
+  <p>The central area where screens are displayed in 3D. Here you can:</p>
+  <ul>
+    <li>Orbit the camera (left-click + drag on empty area)</li>
+    <li>Zoom (mouse scroll)</li>
+    <li>Pan (middle-click + drag)</li>
+    <li>Select screens (left-click on a screen)</li>
+    <li>Manipulate with the gizmo (drag gizmo axes)</li>
+  </ul>
+
+  <h3>Properties Panel (Right)</h3>
+  <p>Appears when a screen is selected. Shows and allows editing:</p>
+  <ul>
+    <li><strong>Position</strong> (X, Y, Z)</li>
+    <li><strong>Rotation</strong> (X, Y, Z in degrees)</li>
+    <li><strong>Size</strong> (Width, Height)</li>
+    <li><strong>Curvature</strong> (arc degrees, -180 to 180)</li>
+    <li><strong>Input Mapping</strong> (Crop X, Y, W, H)</li>
+    <li><strong>Ambient Light</strong> (scene ambient lighting)</li>
+  </ul>
+  <div class="tip">Right-click on any parameter slider to type an exact value.</div>
+
+  <h3>Toolbar</h3>
+  <p>Centered at the bottom, shows the three gizmo modes. The active mode is highlighted in blue.</p>
+
+  <h3>Status Bar</h3>
+  <p>Shows current mode (DESIGNER/VIEW), project name, FPS, server count, and available shortcuts.</p>
+</section>
+
+<section id="en-modes">
+  <h2>Work Modes</h2>
+  <p>Toggle between modes with <kbd>Tab</kbd>.</p>
+
+  <h3>Designer Mode</h3>
+  <p>The main editing mode. Includes the 3D reference grid, transformation gizmo, sidebar, properties panel, toolbar, and full menu bar.</p>
+
+  <h3>View Mode</h3>
+  <p>Clean preview mode. Hides all UI elements except a minimal status bar. Ideal for seeing the final design result.</p>
+  <ul>
+    <li>The window automatically goes always-on-top</li>
+    <li>The menu bar is hidden</li>
+    <li>Lock the camera with the padlock button (top-right corner)</li>
+    <li>Camera presets available with keys <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>, <kbd>0</kbd></li>
+  </ul>
+</section>
+
+<section id="en-screens">
+  <h2>Virtual Screens</h2>
+  <h3>Add a Screen</h3>
+  <p>Press <kbd>A</kbd> or use the <code>[A]dd</code> button in the SCREENS header. A new screen (320x180) is created at the center.</p>
+
+  <h3>Select Screens</h3>
+  <ul>
+    <li><strong>Left-click</strong> on a screen in the viewport or sidebar</li>
+    <li><kbd>Cmd</kbd>+Click (macOS) or <kbd>Ctrl</kbd>+Click (Windows) to add/remove from selection</li>
+    <li><kbd>Shift</kbd>+Click in the sidebar for range selection</li>
+    <li>Press <kbd>S</kbd> to enable area selection mode, then drag a rectangle</li>
+  </ul>
+
+  <h3>Delete Screens</h3>
+  <p>Select one or more screens and press <kbd>Delete</kbd> or <kbd>Backspace</kbd>. You can also use the <code>[X]</code> button in the sidebar.</p>
+
+  <h3>Duplicate a Screen</h3>
+  <p>Right-click on a screen and select <strong>Duplicate</strong>. The copy is created with a position offset and keeps the assigned video source.</p>
+
+  <h3>Screen Types</h3>
+  <ul>
+    <li><strong>Flat</strong>: Standard rectangular screen (default)</li>
+    <li><strong>Curved</strong>: Cylindrical arc screen. Activated by changing the <strong>Curvature</strong> parameter (-180 to +180 degrees)</li>
+    <li><strong>Polygon</strong>: Non-rectangular masked screen. Created when importing polygons from Resolume</li>
+  </ul>
+</section>
+
+<section id="en-transform">
+  <h2>Transforming Screens</h2>
+  <p>Screens are manipulated with the <strong>Gizmo</strong>, a 3D widget that appears on the selected screen.</p>
+
+  <table>
+    <tr><th>Key</th><th>Mode</th><th>Description</th></tr>
+    <tr><td><kbd>W</kbd></td><td>Translate</td><td>Drag red (X), green (Y), or blue (Z) axes to move</td></tr>
+    <tr><td><kbd>E</kbd></td><td>Rotate</td><td>Drag rings to rotate around each axis</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Scale</td><td>Drag to resize the screen</td></tr>
+  </table>
+
+  <p>When <strong>multiple screens are selected</strong>, the gizmo appears on the primary screen and the transformation applies to all selected screens.</p>
+
+  <div class="tip">Right-click on any slider in the properties panel to enter an exact numeric value.</div>
+</section>
+
+<section id="en-sources">
+  <h2>Video Sources</h2>
+  <p>VirtualStage receives real-time video textures from other applications:</p>
+  <ul>
+    <li><strong>macOS</strong>: Via <strong>Syphon</strong> protocol (Resolume, MadMapper, VDMX, etc.)</li>
+    <li><strong>Windows</strong>: Via <strong>Spout</strong> protocol (Resolume, TouchDesigner, OBS, etc.)</li>
+  </ul>
+
+  <h3>Assign a Source</h3>
+  <ol>
+    <li><strong>Sidebar</strong>: Select the screen, then click a server in the SERVERS list</li>
+    <li><strong>Number keys</strong>: Select the screen and press <kbd>1</kbd>-<kbd>9</kbd></li>
+    <li><strong>Context menu</strong>: Right-click on the screen and pick a server</li>
+  </ol>
+
+  <h3>Disconnect a Source</h3>
+  <p>Select the screen and press <kbd>D</kbd>, or right-click &gt; <strong>Disconnect</strong>.</p>
+</section>
+
+<section id="en-mapping">
+  <h2>Input Mapping Editor</h2>
+  <p>The Input Mapping editor lets you crop which portion of the video texture is displayed on each screen.</p>
+
+  <h3>Open the Editor</h3>
+  <p>Select a screen and press <kbd>M</kbd>, or right-click &gt; <strong>Map</strong>.</p>
+
+  <h3>Editor Interface</h3>
+  <p>Shows the video texture fullscreen (or a checkerboard pattern if no texture). A yellow rectangle represents the crop area.</p>
+  <ul>
+    <li>Faint grid lines at 5% intervals; stronger lines at 25%, 50%, 75%</li>
+    <li>Crop values (X, Y, W, H) shown below, normalized 0-1</li>
+  </ul>
+
+  <h3>Editor Controls</h3>
+  <table>
+    <tr><th>Action</th><th>Control</th></tr>
+    <tr><td>Move crop</td><td>Drag inside the rectangle</td></tr>
+    <tr><td>Resize by corner</td><td>Drag any of the 4 corners</td></tr>
+    <tr><td>Resize by edge</td><td>Drag any of the 4 edge midpoints</td></tr>
+    <tr><td>Toggle snap</td><td><kbd>S</kbd></td></tr>
+    <tr><td>Reset crop (full frame)</td><td><kbd>R</kbd></td></tr>
+    <tr><td>Close editor</td><td><kbd>M</kbd> or <kbd>Esc</kbd></td></tr>
+  </table>
+  <div class="tip">Snap aligns edges to 5% increments, making it easy to align crops across multiple screens.</div>
+</section>
+
+<section id="en-resolume">
+  <h2>Import from Resolume</h2>
+  <p>VirtualStage can import layouts directly from <strong>Resolume Arena Advanced Output</strong> XML files.</p>
+
+  <h3>How to Import</h3>
+  <ol>
+    <li>Press <kbd>L</kbd> (or use the <strong>Link</strong> menu)</li>
+    <li>If screens already exist, confirm by pressing <kbd>L</kbd> again</li>
+    <li>Choose rectangle type:
+      <ul>
+        <li><kbd>I</kbd> &mdash; Input coordinates (content)</li>
+        <li><kbd>O</kbd> &mdash; Output coordinates (projection)</li>
+      </ul>
+    </li>
+    <li>VirtualStage automatically finds the most recent XML in the Resolume presets folder</li>
+    <li>If not found, a file dialog opens for manual selection</li>
+  </ol>
+
+  <h3>What Gets Imported</h3>
+  <ul>
+    <li>Each <strong>Slice</strong> becomes a flat screen with proportional size and position</li>
+    <li>Each <strong>Polygon</strong> becomes a polygon-masked screen</li>
+    <li>Crop regions (Input Mapping) are calculated automatically for each screen</li>
+    <li>Screens are scaled and distributed in 3D space maintaining the original layout proportions</li>
+  </ul>
+</section>
+
+<section id="en-camera">
+  <h2>Camera Navigation</h2>
+  <table>
+    <tr><th>Control</th><th>Action</th></tr>
+    <tr><td>Left-click + drag (empty area)</td><td>Orbit camera</td></tr>
+    <tr><td>Mouse scroll</td><td>Zoom in/out</td></tr>
+    <tr><td>Middle-click + drag</td><td>Pan camera</td></tr>
+  </table>
+
+  <h3>Camera Presets</h3>
+  <table>
+    <tr><th>Key</th><th>View</th></tr>
+    <tr><td><kbd>F1</kbd> / <kbd>1</kbd></td><td>Front view</td></tr>
+    <tr><td><kbd>F2</kbd> / <kbd>2</kbd></td><td>Top-down view</td></tr>
+    <tr><td><kbd>F3</kbd> / <kbd>3</kbd></td><td>3/4 perspective</td></tr>
+    <tr><td><kbd>0</kbd></td><td>Level camera (fix tilt)</td></tr>
+  </table>
+  <p>Press <kbd>F</kbd> to toggle fullscreen.</p>
+  <p>In View mode, lock the camera with the padlock button in the top-right corner.</p>
+</section>
+
+<section id="en-projects">
+  <h2>Projects</h2>
+  <h3>New Project</h3>
+  <p><strong>File &gt; New Project</strong> clears all screens and creates a default screen.</p>
+
+  <h3>Save</h3>
+  <ul>
+    <li><kbd>Cmd+S</kbd> / <kbd>Ctrl+S</kbd>: Save to current location (opens dialog if new project)</li>
+    <li><kbd>Cmd+Shift+S</kbd> / <kbd>Ctrl+Shift+S</kbd>: Save As (new location)</li>
+  </ul>
+  <p>Projects are saved as <code>.json</code> files containing all screen data, transforms, sources, crop settings, and camera state.</p>
+
+  <h3>Open</h3>
+  <p><kbd>Cmd+O</kbd> / <kbd>Ctrl+O</kbd>. Restores all screens, camera position, and attempts to reconnect video sources. Autosave activates automatically.</p>
+
+  <h3>Autosave</h3>
+  <ul>
+    <li>Toggle from <strong>File &gt; Autosave (15s)</strong></li>
+    <li>Saves every 15 seconds (local or cloud)</li>
+    <li>Auto-activates when opening an existing project</li>
+  </ul>
+
+  <h3>Undo / Redo</h3>
+  <ul>
+    <li><kbd>Cmd+Z</kbd> / <kbd>Ctrl+Z</kbd>: Undo</li>
+    <li><kbd>Cmd+Shift+Z</kbd> / <kbd>Ctrl+Shift+Z</kbd>: Redo</li>
+  </ul>
+</section>
+
+<section id="en-cloud">
+  <h2>Cloud Storage</h2>
+  <h3>Save to Cloud</h3>
+  <p><strong>File &gt; Save to Cloud</strong>. If it's a new project, you'll be asked for a name. Upload happens in the background.</p>
+
+  <h3>Load from Cloud</h3>
+  <p><strong>File &gt; Load from Cloud</strong>. Shows a list of your saved projects with dates. Click to load, <kbd>Esc</kbd> to close.</p>
+
+  <h3>Preference Sync</h3>
+  <p>Preferences (like measurement units) sync automatically across devices when signed in.</p>
+</section>
+
+<section id="en-prefs">
+  <h2>Preferences</h2>
+  <p>Access via <strong>File &gt; Preferences</strong>.</p>
+  <h3>Measurement Unit</h3>
+  <table>
+    <tr><th>Unit</th><th>Equivalence</th></tr>
+    <tr><td>Meters (m)</td><td>1 m = 100 internal units</td></tr>
+    <tr><td>Centimeters (cm)</td><td>1 cm = 1 internal unit</td></tr>
+    <tr><td>Feet (ft)</td><td>1 ft = 30.48 internal units</td></tr>
+    <tr><td>Inches (in)</td><td>1 in = 2.54 internal units</td></tr>
+  </table>
+</section>
+
+<section id="en-updates">
+  <h2>Updates</h2>
+  <p><strong>Help &gt; Check for Updates</strong> checks for newer versions and can download and install them automatically.</p>
+</section>
+
+<section id="en-keys">
+  <h2>Keyboard Shortcuts</h2>
+  <h3>General</h3>
+  <table>
+    <tr><th>Key</th><th>Action</th></tr>
+    <tr><td><kbd>Tab</kbd></td><td>Toggle Designer / View mode</td></tr>
+    <tr><td><kbd>F</kbd></td><td>Toggle fullscreen</td></tr>
+    <tr><td><kbd>H</kbd></td><td>Show/hide UI (Designer mode)</td></tr>
+  </table>
+  <h3>Screens</h3>
+  <table>
+    <tr><th>Key</th><th>Action</th></tr>
+    <tr><td><kbd>A</kbd></td><td>Add new screen</td></tr>
+    <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Delete selected screen(s)</td></tr>
+    <tr><td><kbd>D</kbd></td><td>Disconnect video source</td></tr>
+    <tr><td><kbd>1</kbd>-<kbd>9</kbd></td><td>Assign video server by number</td></tr>
+  </table>
+  <h3>Gizmo</h3>
+  <table>
+    <tr><th>Key</th><th>Action</th></tr>
+    <tr><td><kbd>W</kbd></td><td>Translate mode</td></tr>
+    <tr><td><kbd>E</kbd></td><td>Rotate mode</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Scale mode</td></tr>
+  </table>
+  <h3>Selection</h3>
+  <table>
+    <tr><th>Key</th><th>Action</th></tr>
+    <tr><td><kbd>S</kbd></td><td>Toggle area selection mode</td></tr>
+    <tr><td><kbd>Cmd/Ctrl</kbd> + Click</td><td>Add/remove from multi-selection</td></tr>
+    <tr><td><kbd>Shift</kbd> + Click (sidebar)</td><td>Range selection</td></tr>
+  </table>
+  <h3>Projects</h3>
+  <table>
+    <tr><th>Key</th><th>Action</th></tr>
+    <tr><td><kbd>Cmd+S</kbd> / <kbd>Ctrl+S</kbd></td><td>Save project</td></tr>
+    <tr><td><kbd>Cmd+Shift+S</kbd> / <kbd>Ctrl+Shift+S</kbd></td><td>Save as...</td></tr>
+    <tr><td><kbd>Cmd+O</kbd> / <kbd>Ctrl+O</kbd></td><td>Open project</td></tr>
+    <tr><td><kbd>Cmd+Z</kbd> / <kbd>Ctrl+Z</kbd></td><td>Undo</td></tr>
+    <tr><td><kbd>Cmd+Shift+Z</kbd> / <kbd>Ctrl+Shift+Z</kbd></td><td>Redo</td></tr>
+  </table>
+  <h3>Import Resolume</h3>
+  <table>
+    <tr><th>Key</th><th>Action</th></tr>
+    <tr><td><kbd>L</kbd></td><td>Start Resolume import</td></tr>
+    <tr><td><kbd>L</kbd> (second time)</td><td>Confirm (if screens exist)</td></tr>
+    <tr><td><kbd>I</kbd></td><td>Use Input rectangles</td></tr>
+    <tr><td><kbd>O</kbd></td><td>Use Output rectangles</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Cancel import</td></tr>
+  </table>
+  <h3>Input Mapping</h3>
+  <table>
+    <tr><th>Key</th><th>Action</th></tr>
+    <tr><td><kbd>M</kbd></td><td>Open/close mapping editor</td></tr>
+    <tr><td><kbd>S</kbd></td><td>Toggle snap to grid</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Reset crop to full frame</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Close editor</td></tr>
+  </table>
+  <h3>Camera</h3>
+  <table>
+    <tr><th>Key</th><th>Action</th></tr>
+    <tr><td><kbd>F1</kbd></td><td>Front view</td></tr>
+    <tr><td><kbd>F2</kbd></td><td>Top view</td></tr>
+    <tr><td><kbd>F3</kbd></td><td>3/4 view</td></tr>
+    <tr><td><kbd>0</kbd></td><td>Level camera</td></tr>
+  </table>
+</section>
+
+<section id="en-mouse">
+  <h2>Mouse Controls</h2>
+  <table>
+    <tr><th>Control</th><th>Action</th></tr>
+    <tr><td>Left-click</td><td>Select screen / Interact with UI</td></tr>
+    <tr><td>Left-click + drag (empty)</td><td>Orbit camera</td></tr>
+    <tr><td>Left-click + drag (gizmo)</td><td>Transform screen</td></tr>
+    <tr><td>Left-click + drag (S mode)</td><td>Area selection</td></tr>
+    <tr><td>Middle-click + drag</td><td>Pan camera</td></tr>
+    <tr><td>Right-click (on screen)</td><td>Context menu</td></tr>
+    <tr><td>Right-click (on slider)</td><td>Enter exact value</td></tr>
+    <tr><td>Scroll</td><td>Camera zoom</td></tr>
+    <tr><td>Scroll (on sidebar)</td><td>Scroll the list</td></tr>
+  </table>
+  <h3>Context Menu</h3>
+  <p>Right-clicking a screen shows: <strong>Map</strong>, <strong>Duplicate</strong>, <strong>Disconnect</strong>, and a list of available servers.</p>
+</section>
+
+</div><!-- container -->
+</div><!-- lang-en -->
+
+
+<!-- ===== SPANISH ===== -->
+<div id="lang-es" class="hidden">
+
+<header>
+  <h1>VirtualStage</h1>
+  <p>Manual de Usuario</p>
+</header>
+
+<div class="container">
+
+<nav>
+  <h2>Contenido</h2>
+  <ol>
+    <li><a href="#es-what">Que es VirtualStage</a></li>
+    <li><a href="#es-install">Instalacion</a></li>
+    <li><a href="#es-start">Primer inicio</a></li>
+    <li><a href="#es-interface">Interfaz</a></li>
+    <li><a href="#es-modes">Modos de trabajo</a></li>
+    <li><a href="#es-screens">Pantallas virtuales</a></li>
+    <li><a href="#es-transform">Transformar pantallas</a></li>
+    <li><a href="#es-sources">Fuentes de video</a></li>
+    <li><a href="#es-mapping">Editor de Input Mapping</a></li>
+    <li><a href="#es-resolume">Importar desde Resolume</a></li>
+    <li><a href="#es-camera">Navegacion de camara</a></li>
+    <li><a href="#es-projects">Proyectos</a></li>
+    <li><a href="#es-cloud">Almacenamiento en la nube</a></li>
+    <li><a href="#es-prefs">Preferencias</a></li>
+    <li><a href="#es-updates">Actualizaciones</a></li>
+    <li><a href="#es-keys">Atajos de teclado</a></li>
+    <li><a href="#es-mouse">Controles de mouse</a></li>
+  </ol>
+</nav>
+
+<section id="es-what">
+  <h2>Que es VirtualStage</h2>
+  <p>VirtualStage es una herramienta de visualizacion 3D para disenar layouts de pantallas LED y superficies de proyeccion virtuales. Permite crear, posicionar, rotar y escalar multiples pantallas en un espacio 3D, y recibir video en tiempo real desde aplicaciones como Resolume Arena mediante Syphon (macOS) o Spout (Windows).</p>
+  <h3>Casos de uso</h3>
+  <ul>
+    <li>Previsualizacion de escenarios con pantallas LED antes del montaje real</li>
+    <li>Diseno de layouts multi-pantalla para shows en vivo</li>
+    <li>Prueba de contenido de video en diferentes configuraciones de pantallas</li>
+    <li>Importacion directa de presets de Resolume Advanced Output</li>
+  </ul>
+</section>
+
+<section id="es-install">
+  <h2>Instalacion</h2>
+  <h3>macOS</h3>
+  <ol>
+    <li>Descarga el archivo <code>VirtualStage-macOS.zip</code> desde la pagina de releases</li>
+    <li>Descomprime el archivo</li>
+    <li>La primera vez, haz clic derecho sobre la app y selecciona <strong>Abrir</strong></li>
+    <li>Si macOS dice que la app esta danada, abre Terminal y ejecuta:
+      <pre><code>xattr -cr /ruta/a/VirtualStage.app</code></pre>
+    </li>
+    <li>Abre la app normalmente</li>
+  </ol>
+  <h3>Windows</h3>
+  <ol>
+    <li>Descarga el archivo <code>VirtualStage-Windows.zip</code> desde la pagina de releases</li>
+    <li>Descomprime en la carpeta deseada</li>
+    <li>Ejecuta <code>VirtualStage.exe</code></li>
+  </ol>
+</section>
+
+<section id="es-start">
+  <h2>Primer inicio</h2>
+  <p>Al abrir VirtualStage por primera vez, aparece una pantalla de autenticacion donde puedes:</p>
+  <ul>
+    <li><strong>Iniciar sesion</strong> con un email y contrasena existentes</li>
+    <li><strong>Registrar una cuenta nueva</strong> (se requiere confirmacion por email)</li>
+  </ul>
+  <p>La cuenta permite guardar y cargar proyectos en la nube y sincronizar preferencias entre dispositivos.</p>
+  <p>Una vez autenticado, se abre el editor con una pantalla virtual por defecto en el centro de la escena.</p>
+</section>
+
+<section id="es-interface">
+  <h2>Interfaz</h2>
+  <div class="diagram">+-------------------------------------------------------+
+|  File  View  Link  Help   [Autosave ON]               |  Barra de menu
++----------+--------------------------------------------+
+|          |                                            |
+| SCREENS  |                                            |
+|  Screen1 |           Vista 3D                         |
+|  Screen2 |          (Viewport)                        |
+|          |                                            |
+|----------|                                            |
+| SERVERS  |                                            |
+|  Source1  |                                            |
+|  Source2  |         [W] Move  [E] Rotate  [R] Scale   |  Toolbar
++----------+--------------------------------------------+
+| DESIGNER | project.json | FPS: 60 | Servers: 2 | ... |  Barra de estado
++-------------------------------------------------------+</div>
+
+  <h3>Barra de menu</h3>
+  <ul>
+    <li><strong>File</strong>: Nuevo, Abrir, Guardar, Guardar Como, Guardar/Cargar en la Nube, Autosave, Preferencias, Cerrar sesion, Salir</li>
+    <li><strong>View</strong>: Muestra u oculta secciones del panel de propiedades (Ambient Light, Position, Rotation, Size, Input Mapping)</li>
+    <li><strong>Link</strong>: Importar layout desde Resolume (Input u Output)</li>
+    <li><strong>Help</strong>: Manual, Buscar actualizaciones, Acerca de</li>
+  </ul>
+
+  <h3>Panel lateral (Sidebar)</h3>
+  <ul>
+    <li><strong>SCREENS</strong>: Todas las pantallas del proyecto. Click para seleccionar, <code>[X]</code> para eliminar</li>
+    <li><strong>SERVERS</strong>: Fuentes de video disponibles (Syphon/Spout). Click en un servidor para asignarlo a la pantalla seleccionada</li>
+  </ul>
+  <p>El panel lateral tiene scroll si el contenido excede el alto de la ventana.</p>
+
+  <h3>Vista 3D (Viewport)</h3>
+  <p>El area central donde se visualizan las pantallas en 3D. Aqui se puede:</p>
+  <ul>
+    <li>Orbitar la camara (click izquierdo + arrastrar en area vacia)</li>
+    <li>Hacer zoom (scroll del mouse)</li>
+    <li>Pan (click medio + arrastrar)</li>
+    <li>Seleccionar pantallas (click izquierdo sobre una pantalla)</li>
+    <li>Manipular con el gizmo (arrastrar los ejes del gizmo)</li>
+  </ul>
+
+  <h3>Panel de propiedades (Derecha)</h3>
+  <p>Aparece cuando hay una pantalla seleccionada. Muestra y permite editar:</p>
+  <ul>
+    <li><strong>Position</strong> (X, Y, Z)</li>
+    <li><strong>Rotation</strong> (X, Y, Z en grados)</li>
+    <li><strong>Size</strong> (Ancho, Alto)</li>
+    <li><strong>Curvature</strong> (grados de arco, -180 a 180)</li>
+    <li><strong>Input Mapping</strong> (Crop X, Y, W, H)</li>
+    <li><strong>Ambient Light</strong> (iluminacion ambiental de la escena)</li>
+  </ul>
+  <div class="tip">Haz clic derecho sobre cualquier slider para escribir un valor exacto.</div>
+
+  <h3>Toolbar</h3>
+  <p>Centrada en la parte inferior, muestra los tres modos del gizmo. El modo activo se resalta en azul.</p>
+
+  <h3>Barra de estado</h3>
+  <p>Muestra el modo actual (DESIGNER/VIEW), nombre del proyecto, FPS, cantidad de servidores y atajos disponibles.</p>
+</section>
+
+<section id="es-modes">
+  <h2>Modos de trabajo</h2>
+  <p>Alterna entre modos con <kbd>Tab</kbd>.</p>
+
+  <h3>Modo Designer</h3>
+  <p>El modo de edicion principal. Incluye la grilla 3D de referencia, gizmo de transformacion, panel lateral, panel de propiedades, toolbar y barra de menu completa.</p>
+
+  <h3>Modo View</h3>
+  <p>Modo de previsualizacion limpia. Oculta todos los elementos de UI excepto la barra de estado minima. Ideal para ver el resultado final del diseno.</p>
+  <ul>
+    <li>La ventana se coloca automaticamente "siempre al frente"</li>
+    <li>La barra de menu se oculta</li>
+    <li>Se puede bloquear la camara con el boton de candado (esquina superior derecha)</li>
+    <li>Presets de camara disponibles con teclas <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>, <kbd>0</kbd></li>
+  </ul>
+</section>
+
+<section id="es-screens">
+  <h2>Pantallas virtuales</h2>
+  <h3>Agregar una pantalla</h3>
+  <p>Presiona <kbd>A</kbd> o usa el boton <code>[A]dd</code> en el encabezado SCREENS. Se crea una nueva pantalla (320x180) en el centro.</p>
+
+  <h3>Seleccionar pantallas</h3>
+  <ul>
+    <li><strong>Click izquierdo</strong> sobre una pantalla en el viewport o en el sidebar</li>
+    <li><kbd>Cmd</kbd>+Click (macOS) o <kbd>Ctrl</kbd>+Click (Windows) para agregar/quitar de la seleccion</li>
+    <li><kbd>Shift</kbd>+Click en el sidebar para seleccion por rango</li>
+    <li>Presiona <kbd>S</kbd> para activar modo de seleccion por area, luego arrastra un rectangulo</li>
+  </ul>
+
+  <h3>Eliminar pantallas</h3>
+  <p>Selecciona una o mas pantallas y presiona <kbd>Delete</kbd> o <kbd>Backspace</kbd>. Tambien puedes usar el boton <code>[X]</code> en el sidebar.</p>
+
+  <h3>Duplicar una pantalla</h3>
+  <p>Haz clic derecho sobre una pantalla y selecciona <strong>Duplicate</strong>. La copia se crea con un offset de posicion y mantiene la fuente de video asignada.</p>
+
+  <h3>Tipos de pantalla</h3>
+  <ul>
+    <li><strong>Flat</strong>: Pantalla plana rectangular (por defecto)</li>
+    <li><strong>Curved</strong>: Pantalla curva cilindrica. Se activa al modificar el parametro <strong>Curvature</strong> (-180 a +180 grados)</li>
+    <li><strong>Polygon</strong>: Pantalla con mascara poligonal no rectangular. Se crea al importar poligonos desde Resolume</li>
+  </ul>
+</section>
+
+<section id="es-transform">
+  <h2>Transformar pantallas</h2>
+  <p>Las pantallas se manipulan con el <strong>Gizmo</strong>, un widget 3D que aparece sobre la pantalla seleccionada.</p>
+
+  <table>
+    <tr><th>Tecla</th><th>Modo</th><th>Descripcion</th></tr>
+    <tr><td><kbd>W</kbd></td><td>Translate (Mover)</td><td>Arrastra los ejes rojo (X), verde (Y) o azul (Z)</td></tr>
+    <tr><td><kbd>E</kbd></td><td>Rotate (Rotar)</td><td>Arrastra los anillos para rotar alrededor de cada eje</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Scale (Escalar)</td><td>Arrastra para cambiar el tamano</td></tr>
+  </table>
+
+  <p>Cuando hay <strong>multiples pantallas seleccionadas</strong>, el gizmo se muestra en la pantalla principal y la transformacion se aplica a todas.</p>
+
+  <div class="tip">Haz clic derecho sobre cualquier slider del panel de propiedades para ingresar un valor exacto.</div>
+</section>
+
+<section id="es-sources">
+  <h2>Fuentes de video</h2>
+  <p>VirtualStage recibe texturas de video en tiempo real desde otras aplicaciones:</p>
+  <ul>
+    <li><strong>macOS</strong>: Via protocolo <strong>Syphon</strong> (Resolume, MadMapper, VDMX, etc.)</li>
+    <li><strong>Windows</strong>: Via protocolo <strong>Spout</strong> (Resolume, TouchDesigner, OBS, etc.)</li>
+  </ul>
+
+  <h3>Asignar una fuente</h3>
+  <ol>
+    <li><strong>Sidebar</strong>: Selecciona la pantalla, luego haz click en un servidor de la lista SERVERS</li>
+    <li><strong>Teclas numericas</strong>: Selecciona la pantalla y presiona <kbd>1</kbd>-<kbd>9</kbd></li>
+    <li><strong>Menu contextual</strong>: Clic derecho sobre la pantalla y selecciona un servidor</li>
+  </ol>
+
+  <h3>Desconectar una fuente</h3>
+  <p>Selecciona la pantalla y presiona <kbd>D</kbd>, o clic derecho &gt; <strong>Disconnect</strong>.</p>
+</section>
+
+<section id="es-mapping">
+  <h2>Editor de Input Mapping</h2>
+  <p>El editor permite recortar que porcion de la textura de video se muestra en cada pantalla.</p>
+
+  <h3>Abrir el editor</h3>
+  <p>Selecciona una pantalla y presiona <kbd>M</kbd>, o clic derecho &gt; <strong>Map</strong>.</p>
+
+  <h3>Interfaz del editor</h3>
+  <p>Muestra la textura de video a pantalla completa (o un patron cuadriculado si no hay textura). Un rectangulo amarillo representa el area de recorte (crop).</p>
+  <ul>
+    <li>Lineas tenues al 5% y lineas mas visibles al 25%, 50% y 75%</li>
+    <li>Valores del crop (X, Y, W, H) debajo, normalizados 0-1</li>
+  </ul>
+
+  <h3>Controles del editor</h3>
+  <table>
+    <tr><th>Accion</th><th>Control</th></tr>
+    <tr><td>Mover el crop</td><td>Arrastrar dentro del rectangulo</td></tr>
+    <tr><td>Redimensionar por esquina</td><td>Arrastrar una de las 4 esquinas</td></tr>
+    <tr><td>Redimensionar por borde</td><td>Arrastrar uno de los 4 bordes centrales</td></tr>
+    <tr><td>Activar/desactivar snap</td><td><kbd>S</kbd></td></tr>
+    <tr><td>Resetear crop (pantalla completa)</td><td><kbd>R</kbd></td></tr>
+    <tr><td>Cerrar editor</td><td><kbd>M</kbd> o <kbd>Esc</kbd></td></tr>
+  </table>
+  <div class="tip">El snap alinea los bordes a incrementos del 5%, facilitando la alineacion entre multiples pantallas.</div>
+</section>
+
+<section id="es-resolume">
+  <h2>Importar desde Resolume</h2>
+  <p>VirtualStage puede importar layouts directamente desde archivos XML de <strong>Resolume Arena Advanced Output</strong>.</p>
+
+  <h3>Como importar</h3>
+  <ol>
+    <li>Presiona <kbd>L</kbd> (o usa el menu <strong>Link</strong>)</li>
+    <li>Si ya hay pantallas, confirma presionando <kbd>L</kbd> nuevamente</li>
+    <li>Elige el tipo de rectangulo:
+      <ul>
+        <li><kbd>I</kbd> &mdash; Coordenadas de Input (contenido)</li>
+        <li><kbd>O</kbd> &mdash; Coordenadas de Output (proyeccion)</li>
+      </ul>
+    </li>
+    <li>VirtualStage busca automaticamente el XML mas reciente en la carpeta de presets de Resolume</li>
+    <li>Si no lo encuentra, se abre un dialogo para seleccionar el archivo manualmente</li>
+  </ol>
+
+  <h3>Que se importa</h3>
+  <ul>
+    <li>Cada <strong>Slice</strong> se convierte en una pantalla plana con tamano y posicion proporcional</li>
+    <li>Cada <strong>Polygon</strong> se convierte en una pantalla con mascara poligonal</li>
+    <li>Se calculan automaticamente las regiones de crop para cada pantalla</li>
+    <li>Las pantallas se escalan y distribuyen en el espacio 3D manteniendo las proporciones del layout original</li>
+  </ul>
+</section>
+
+<section id="es-camera">
+  <h2>Navegacion de camara</h2>
+  <table>
+    <tr><th>Control</th><th>Accion</th></tr>
+    <tr><td>Click izquierdo + arrastrar (area vacia)</td><td>Orbitar camara</td></tr>
+    <tr><td>Scroll del mouse</td><td>Zoom in/out</td></tr>
+    <tr><td>Click medio + arrastrar</td><td>Pan de camara</td></tr>
+  </table>
+
+  <h3>Presets de camara</h3>
+  <table>
+    <tr><th>Tecla</th><th>Vista</th></tr>
+    <tr><td><kbd>F1</kbd> / <kbd>1</kbd></td><td>Vista frontal</td></tr>
+    <tr><td><kbd>F2</kbd> / <kbd>2</kbd></td><td>Vista superior</td></tr>
+    <tr><td><kbd>F3</kbd> / <kbd>3</kbd></td><td>Vista 3/4 perspectiva</td></tr>
+    <tr><td><kbd>0</kbd></td><td>Nivelar camara (corregir inclinacion)</td></tr>
+  </table>
+  <p>Presiona <kbd>F</kbd> para alternar entre ventana y pantalla completa.</p>
+  <p>En modo View, bloquea la camara con el boton de candado en la esquina superior derecha.</p>
+</section>
+
+<section id="es-projects">
+  <h2>Proyectos</h2>
+  <h3>Nuevo proyecto</h3>
+  <p><strong>File &gt; New Project</strong> limpia todas las pantallas y crea una por defecto.</p>
+
+  <h3>Guardar</h3>
+  <ul>
+    <li><kbd>Cmd+S</kbd> / <kbd>Ctrl+S</kbd>: Guarda en la ubicacion actual (abre dialogo si es proyecto nuevo)</li>
+    <li><kbd>Cmd+Shift+S</kbd> / <kbd>Ctrl+Shift+S</kbd>: Guardar como... (nueva ubicacion)</li>
+  </ul>
+  <p>Los proyectos se guardan como archivos <code>.json</code> con toda la informacion de pantallas, transformaciones, fuentes, crop y estado de camara.</p>
+
+  <h3>Abrir</h3>
+  <p><kbd>Cmd+O</kbd> / <kbd>Ctrl+O</kbd>. Restaura todas las pantallas, la posicion de camara, e intenta reconectar las fuentes de video. El autosave se activa automaticamente.</p>
+
+  <h3>Autosave</h3>
+  <ul>
+    <li>Activa/desactiva desde <strong>File &gt; Autosave (15s)</strong></li>
+    <li>Guarda automaticamente cada 15 segundos (local o nube)</li>
+    <li>Se activa automaticamente al abrir un proyecto existente</li>
+  </ul>
+
+  <h3>Deshacer / Rehacer</h3>
+  <ul>
+    <li><kbd>Cmd+Z</kbd> / <kbd>Ctrl+Z</kbd>: Deshacer</li>
+    <li><kbd>Cmd+Shift+Z</kbd> / <kbd>Ctrl+Shift+Z</kbd>: Rehacer</li>
+  </ul>
+</section>
+
+<section id="es-cloud">
+  <h2>Almacenamiento en la nube</h2>
+  <h3>Guardar en la nube</h3>
+  <p><strong>File &gt; Save to Cloud</strong>. Si es un proyecto nuevo, se pide un nombre. La subida ocurre en segundo plano.</p>
+
+  <h3>Cargar desde la nube</h3>
+  <p><strong>File &gt; Load from Cloud</strong>. Muestra una lista de proyectos guardados con fechas. Click para cargar, <kbd>Esc</kbd> para cerrar.</p>
+
+  <h3>Sincronizacion de preferencias</h3>
+  <p>Las preferencias (como unidad de medida) se sincronizan automaticamente entre dispositivos al iniciar sesion.</p>
+</section>
+
+<section id="es-prefs">
+  <h2>Preferencias</h2>
+  <p>Accede desde <strong>File &gt; Preferences</strong>.</p>
+  <h3>Unidad de medida</h3>
+  <table>
+    <tr><th>Unidad</th><th>Equivalencia</th></tr>
+    <tr><td>Metros (m)</td><td>1 m = 100 unidades internas</td></tr>
+    <tr><td>Centimetros (cm)</td><td>1 cm = 1 unidad interna</td></tr>
+    <tr><td>Pies (ft)</td><td>1 ft = 30.48 unidades internas</td></tr>
+    <tr><td>Pulgadas (in)</td><td>1 in = 2.54 unidades internas</td></tr>
+  </table>
+</section>
+
+<section id="es-updates">
+  <h2>Actualizaciones</h2>
+  <p><strong>Help &gt; Check for Updates</strong> busca versiones mas nuevas y puede descargarlas e instalarlas automaticamente.</p>
+</section>
+
+<section id="es-keys">
+  <h2>Atajos de teclado</h2>
+  <h3>Generales</h3>
+  <table>
+    <tr><th>Tecla</th><th>Accion</th></tr>
+    <tr><td><kbd>Tab</kbd></td><td>Alternar modo Designer / View</td></tr>
+    <tr><td><kbd>F</kbd></td><td>Pantalla completa</td></tr>
+    <tr><td><kbd>H</kbd></td><td>Mostrar/ocultar UI (modo Designer)</td></tr>
+  </table>
+  <h3>Pantallas</h3>
+  <table>
+    <tr><th>Tecla</th><th>Accion</th></tr>
+    <tr><td><kbd>A</kbd></td><td>Agregar nueva pantalla</td></tr>
+    <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Eliminar pantalla(s) seleccionada(s)</td></tr>
+    <tr><td><kbd>D</kbd></td><td>Desconectar fuente de video</td></tr>
+    <tr><td><kbd>1</kbd>-<kbd>9</kbd></td><td>Asignar servidor de video por numero</td></tr>
+  </table>
+  <h3>Gizmo</h3>
+  <table>
+    <tr><th>Tecla</th><th>Accion</th></tr>
+    <tr><td><kbd>W</kbd></td><td>Modo Mover (Translate)</td></tr>
+    <tr><td><kbd>E</kbd></td><td>Modo Rotar (Rotate)</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Modo Escalar (Scale)</td></tr>
+  </table>
+  <h3>Seleccion</h3>
+  <table>
+    <tr><th>Tecla</th><th>Accion</th></tr>
+    <tr><td><kbd>S</kbd></td><td>Activar/desactivar seleccion por area</td></tr>
+    <tr><td><kbd>Cmd/Ctrl</kbd> + Click</td><td>Agregar/quitar de seleccion multiple</td></tr>
+    <tr><td><kbd>Shift</kbd> + Click (sidebar)</td><td>Seleccion por rango</td></tr>
+  </table>
+  <h3>Proyectos</h3>
+  <table>
+    <tr><th>Tecla</th><th>Accion</th></tr>
+    <tr><td><kbd>Cmd+S</kbd> / <kbd>Ctrl+S</kbd></td><td>Guardar proyecto</td></tr>
+    <tr><td><kbd>Cmd+Shift+S</kbd> / <kbd>Ctrl+Shift+S</kbd></td><td>Guardar como...</td></tr>
+    <tr><td><kbd>Cmd+O</kbd> / <kbd>Ctrl+O</kbd></td><td>Abrir proyecto</td></tr>
+    <tr><td><kbd>Cmd+Z</kbd> / <kbd>Ctrl+Z</kbd></td><td>Deshacer</td></tr>
+    <tr><td><kbd>Cmd+Shift+Z</kbd> / <kbd>Ctrl+Shift+Z</kbd></td><td>Rehacer</td></tr>
+  </table>
+  <h3>Importar Resolume</h3>
+  <table>
+    <tr><th>Tecla</th><th>Accion</th></tr>
+    <tr><td><kbd>L</kbd></td><td>Iniciar importacion</td></tr>
+    <tr><td><kbd>L</kbd> (segunda vez)</td><td>Confirmar (si hay pantallas)</td></tr>
+    <tr><td><kbd>I</kbd></td><td>Usar rectangulos de Input</td></tr>
+    <tr><td><kbd>O</kbd></td><td>Usar rectangulos de Output</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Cancelar importacion</td></tr>
+  </table>
+  <h3>Input Mapping</h3>
+  <table>
+    <tr><th>Tecla</th><th>Accion</th></tr>
+    <tr><td><kbd>M</kbd></td><td>Abrir/cerrar editor de mapping</td></tr>
+    <tr><td><kbd>S</kbd></td><td>Activar/desactivar snap a grilla</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Resetear crop a pantalla completa</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Cerrar editor</td></tr>
+  </table>
+  <h3>Camara</h3>
+  <table>
+    <tr><th>Tecla</th><th>Accion</th></tr>
+    <tr><td><kbd>F1</kbd></td><td>Vista frontal</td></tr>
+    <tr><td><kbd>F2</kbd></td><td>Vista superior</td></tr>
+    <tr><td><kbd>F3</kbd></td><td>Vista 3/4</td></tr>
+    <tr><td><kbd>0</kbd></td><td>Nivelar camara</td></tr>
+  </table>
+</section>
+
+<section id="es-mouse">
+  <h2>Controles de mouse</h2>
+  <table>
+    <tr><th>Control</th><th>Accion</th></tr>
+    <tr><td>Click izquierdo</td><td>Seleccionar pantalla / Interactuar con UI</td></tr>
+    <tr><td>Click izquierdo + arrastrar (vacio)</td><td>Orbitar camara</td></tr>
+    <tr><td>Click izquierdo + arrastrar (gizmo)</td><td>Transformar pantalla</td></tr>
+    <tr><td>Click izquierdo + arrastrar (modo S)</td><td>Seleccion por area</td></tr>
+    <tr><td>Click medio + arrastrar</td><td>Pan de camara</td></tr>
+    <tr><td>Click derecho (sobre pantalla)</td><td>Menu contextual</td></tr>
+    <tr><td>Click derecho (sobre slider)</td><td>Ingresar valor exacto</td></tr>
+    <tr><td>Scroll</td><td>Zoom de camara</td></tr>
+    <tr><td>Scroll (sobre sidebar)</td><td>Scroll de la lista</td></tr>
+  </table>
+  <h3>Menu contextual</h3>
+  <p>Al hacer clic derecho sobre una pantalla se muestra: <strong>Map</strong>, <strong>Duplicate</strong>, <strong>Disconnect</strong>, y la lista de servidores disponibles.</p>
+</section>
+
+</div><!-- container -->
+</div><!-- lang-es -->
+
+<script>
+function setLang(lang) {
+  document.getElementById('lang-en').classList.toggle('hidden', lang !== 'en');
+  document.getElementById('lang-es').classList.toggle('hidden', lang !== 'es');
+  document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+  document.getElementById('btn-es').classList.toggle('active', lang === 'es');
+  window.scrollTo(0, 0);
+}
+</script>
+
+</body>
+</html>

@@ -225,9 +225,9 @@ void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam) {
         for (auto& state : dragTargets) {
             glm::vec3 newScale = state.startScale;
             switch (activeAxis) {
-                case Axis::X: newScale.x = std::max(0.1f, state.startScale.x + scaleDelta); break;
-                case Axis::Y: newScale.y = std::max(0.1f, state.startScale.y + scaleDelta); break;
-                case Axis::Z: newScale.z = std::max(0.1f, state.startScale.z + scaleDelta); break;
+                case Axis::X: newScale.x = std::max(0.01f, state.startScale.x + scaleDelta); break;
+                case Axis::Y: newScale.y = std::max(0.01f, state.startScale.y + scaleDelta); break;
+                case Axis::Z: newScale.z = std::max(0.01f, state.startScale.z + scaleDelta); break;
                 default: break;
             }
             state.target->setScale(newScale);

@@ -9,6 +9,13 @@
 #include "PropertiesPanel.h"
 #include "UndoManager.h"
 #include "AppVersion.h"
+#include "AuthManager.h"
+#include "AuthModal.h"
+#include "CloudStorage.h"
+#include "Preferences.h"
+#include "SettingsModal.h"
+#include <mutex>
+#include <atomic>
 
 enum class AppMode { Designer, View };
 enum class UpdateState { Idle, Checking, Available, UpToDate, Error, Downloading };
@@ -116,6 +123,7 @@ private:
 
     // Project save/load
     std::string currentProjectPath;
+    std::string currentCloudProjectName; // non-empty = project lives in cloud
     void saveProject(bool saveAs = false);
     void openProject();
     void newProject();
@@ -124,6 +132,7 @@ private:
     bool autosaveEnabled = false;
     float autosaveInterval = 15.0f;
     float autosaveTimer = 0.0f;
+    void doAutosave();
 
     // Resolume XML import
     enum class LinkState { None, Confirm, ChooseRect };
@@ -157,4 +166,53 @@ private:
     // About dialog
     bool showAboutDialog = false;
     void drawAboutDialog();
+
+    // ── Authentication ──────────────────────────────────────────────────────
+    AuthManager authManager;
+    AuthModal   authModal;
+
+    // Background auth result (written by worker thread, read in update())
+    struct AuthResult {
+        bool done        = false;
+        bool success     = false;
+        bool needConfirm = false; // email confirmation required after signup
+        std::string error;
+    };
+    std::mutex    authResultMutex;
+    AuthResult    pendingAuthResult;
+
+    void handleAuthSubmit(AuthModal::Tab tab,
+                          const std::string& email,
+                          const std::string& password,
+                          const std::string& confirm);
+
+    // ── Cloud storage ────────────────────────────────────────────────────────
+    CloudStorage cloudStorage;
+
+    // Cloud load modal state
+    enum class CloudLoadState { Hidden, Loading, Loaded, Error };
+    CloudLoadState cloudLoadState = CloudLoadState::Hidden;
+    std::vector<CloudStorage::CloudProject> cloudProjects;
+    std::string cloudLoadError;
+
+    // Background cloud result for project load
+    struct CloudProjectResult {
+        bool done    = false;
+        bool success = false;
+        std::string error;
+        std::string name;
+        ofJson data;
+    };
+    std::mutex         cloudProjectResultMutex;
+    CloudProjectResult pendingCloudProject;
+
+    void saveToCloud();
+    void loadFromCloud();
+    void drawCloudLoadModal();
+    bool handleCloudLoadModalClick(int x, int y);
+
+    // ── Preferences & Settings ──────────────────────────────────────────────
+    Preferences preferences;
+    SettingsModal settingsModal;
+    std::atomic<bool> prefsNeedRefresh{false};
 };

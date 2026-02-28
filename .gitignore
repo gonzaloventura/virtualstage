@@ -1,4 +1,7 @@
 bin/
+!bin/data/
+bin/data/*
+!bin/data/manual.html
 obj/
 build/
 *.app

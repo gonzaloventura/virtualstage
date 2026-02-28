@@ -10,6 +10,7 @@
 #ifdef TARGET_OSX
 #include <unistd.h>
 #endif
+#include <mutex>
 
 void ofApp::setup() {
     ofSetEscapeQuitsApp(false);
@@ -43,6 +44,53 @@ void ofApp::setup() {
 
     // Push initial undo state
     undoManager.pushState(scene);
+
+    // ── Auth setup ──────────────────────────────────────────────────────────
+    // Wire up the modal submit callback before checking session
+    authModal.onSubmit = [this](AuthModal::Tab tab, const std::string& email,
+                                const std::string& pwd, const std::string& confirm) {
+        handleAuthSubmit(tab, email, pwd, confirm);
+    };
+
+    authManager.loadSession();
+    if (authManager.isAuthenticated()) {
+        // Already logged in — refresh token in background (silent fail = offline OK)
+        std::thread([this]() {
+            std::string err;
+            authManager.refreshToken(err); // ignore error: offline mode is fine
+        }).detach();
+        // Load cloud preferences in background
+        std::thread([this]() {
+            std::string err, cloudData;
+            if (cloudStorage.loadPreferences(authManager.getSession(), cloudData, err)) {
+                if (!cloudData.empty()) {
+                    preferences.fromJsonString(cloudData);
+                    preferences.saveLocal();
+                    prefsNeedRefresh.store(true);
+                }
+            }
+        }).detach();
+    } else {
+        authModal.show();
+        cam.disableMouseInput(); // Block camera while auth modal is up
+    }
+
+    // ── Preferences setup ────────────────────────────────────────────────────
+    preferences.loadLocal();
+    propertiesPanel.setPreferences(&preferences);
+    propertiesPanel.refreshUnitLabels();
+
+    settingsModal.onPreferenceChanged = [this]() {
+        propertiesPanel.refreshUnitLabels();
+        // Sync to cloud in background
+        if (authManager.isAuthenticated()) {
+            std::string jsonStr = preferences.toJsonString();
+            std::thread([this, jsonStr]() {
+                std::string err;
+                cloudStorage.savePreferences(authManager.getSession(), jsonStr, err);
+            }).detach();
+        }
+    };
 }
 
 void ofApp::update() {
@@ -53,6 +101,15 @@ void ofApp::update() {
     // Update background from ambient light slider (0-100 → 0-60)
     bgBrightness = (int)(propertiesPanel.getAmbientLight() * 0.6f);
 
+    // Restrict camera input to the 3D viewport area (excludes sidebar, menu bar, status bar)
+    if (appMode == AppMode::Designer && showUI) {
+        cam.setControlArea(ofRectangle(serverListWidth, menuBarHeight,
+                                        ofGetWidth() - serverListWidth,
+                                        ofGetHeight() - menuBarHeight - statusBarHeight));
+    } else {
+        cam.clearControlArea();
+    }
+
     // Reset properties dirty flag after idle (allows new undo capture)
     if (propsDirty) {
         propsDirtyTimer += ofGetLastFrameTime();
@@ -62,12 +119,85 @@ void ofApp::update() {
         }
     }
 
-    // Autosave
-    if (autosaveEnabled && !currentProjectPath.empty()) {
+    // Refresh UI if preferences were updated from cloud
+    if (prefsNeedRefresh.exchange(false)) {
+        propertiesPanel.refreshUnitLabels();
+    }
+
+    // Autosave — works with both local and cloud projects
+    if (autosaveEnabled && (!currentProjectPath.empty() || !currentCloudProjectName.empty())) {
         autosaveTimer += ofGetLastFrameTime();
         if (autosaveTimer >= autosaveInterval) {
             autosaveTimer = 0;
-            saveProject(false);
+            doAutosave();
+        }
+    }
+
+    // ── Auth result (written by background thread) ──────────────────────────
+    {
+        std::lock_guard<std::mutex> lock(authResultMutex);
+        if (pendingAuthResult.done) {
+            pendingAuthResult.done = false;
+            if (pendingAuthResult.success) {
+                if (pendingAuthResult.needConfirm) {
+                    authModal.setLoading(false);
+                    authModal.setSuccess("Account created! Please check your email to confirm, then sign in.");
+                } else {
+                    authModal.hide();
+                    cam.enableMouseInput(); // Re-enable camera after successful auth
+                    // Load cloud preferences after first login
+                    std::thread([this]() {
+                        std::string err, cloudData;
+                        if (cloudStorage.loadPreferences(authManager.getSession(), cloudData, err)) {
+                            if (!cloudData.empty()) {
+                                preferences.fromJsonString(cloudData);
+                                preferences.saveLocal();
+                                prefsNeedRefresh.store(true);
+                            }
+                        }
+                    }).detach();
+                }
+            } else {
+                authModal.setError(pendingAuthResult.error);
+            }
+        }
+    }
+
+    // ── Cloud project load result ────────────────────────────────────────────
+    {
+        std::lock_guard<std::mutex> lock(cloudProjectResultMutex);
+        if (pendingCloudProject.done) {
+            pendingCloudProject.done = false;
+            if (pendingCloudProject.success) {
+                cloudLoadState = CloudLoadState::Hidden;
+                // Write to temp file and open as project
+                std::string tmpPath = ofFilePath::getUserHomeDir() + "/.virtualstage/cloud_load_tmp.json";
+                ofSavePrettyJson(tmpPath, pendingCloudProject.data);
+                ofJson camJson;
+                if (scene.loadProject(tmpPath, &camJson)) {
+                    currentProjectPath = "";
+                    currentCloudProjectName = pendingCloudProject.name;
+                    autosaveEnabled = true;
+                    autosaveTimer = 0;
+                    if (!camJson.is_null()) {
+                        try {
+                            auto pos = camJson["position"];
+                            auto tgt = camJson["target"];
+                            cam.setPosition(glm::vec3(pos[0], pos[1], pos[2]));
+                            cam.setTarget(glm::vec3(tgt[0], tgt[1], tgt[2]));
+                            cam.setDistance(camJson.value("distance", 800.0f));
+                        } catch (...) {}
+                    }
+                    undoManager.clear();
+                    pushUndo();
+                    propertiesPanel.setTarget(nullptr);
+                    scene.clearSelection();
+                }
+                ofFile::removeFile(tmpPath);
+            } else {
+                cloudLoadState = CloudLoadState::Error;
+                cloudLoadError = pendingCloudProject.error;
+            }
         }
     }
 
@@ -149,6 +279,18 @@ void ofApp::draw() {
     if (showUpdateModal) {
         drawUpdateModal();
     }
+    // Cloud load modal
+    if (cloudLoadState != CloudLoadState::Hidden) {
+        drawCloudLoadModal();
+    }
+    // Settings modal
+    if (settingsModal.isVisible()) {
+        settingsModal.draw();
+    }
+    // Auth modal — topmost, blocks all interaction underneath
+    if (authModal.isVisible()) {
+        authModal.draw();
+    }
 }
 
 void ofApp::drawServerList() {
@@ -166,7 +308,7 @@ void ofApp::drawServerList() {
     float contentH = 0;
     contentH += 28; // SCREENS header
     contentH += std::max(scene.getScreenCount(), 1) * rowH;
-    contentH += 28; // gap + SERVERS header
+    contentH += 48; // gap (20) + separator line + gap (8) + SERVERS header (28)
     contentH += std::max((int)servers.size(), 1) * rowH;
     contentH += 10; // bottom padding
     sidebarContentHeight = contentH;
@@ -246,6 +388,9 @@ void ofApp::drawServerList() {
     }
 
     // --- SERVERS header ---
+    curY += 20;
+    ofSetColor(60);
+    ofDrawLine(panelX + 10, curY, panelX + serverListWidth - 10, curY);
     curY += 8;
     ofSetColor(200);
     ofDrawBitmapString("SERVERS (click to assign)", panelX + 10, curY + 18);
@@ -286,7 +431,13 @@ void ofApp::drawServerList() {
 
     if (servers.empty()) {
         ofSetColor(100);
+#ifdef TARGET_OSX
+        ofDrawBitmapString("Waiting for Syphon servers...", panelX + 10, curY + 15);
+#elif defined(TARGET_WIN32)
+        ofDrawBitmapString("Waiting for Spout servers...", panelX + 10, curY + 15);
+#else
         ofDrawBitmapString("Waiting for servers...", panelX + 10, curY + 15);
+#endif
         curY += rowH;
     }
 
@@ -365,8 +516,8 @@ bool ofApp::handleSidebarClick(int x, int y) {
 
     if (scene.getScreenCount() == 0) curY += rowH;
 
-    // Gap + SERVERS header
-    curY += 8 + 28;
+    // Gap + separator + SERVERS header
+    curY += 20 + 8 + 28;
 
     // --- Server rows ---
     for (size_t i = 0; i < servers.size(); i++) {
@@ -391,13 +542,18 @@ bool ofApp::handleSidebarClick(int x, int y) {
 }
 
 void ofApp::mouseScrolled(int x, int y, float scrollX, float scrollY) {
-    // Scroll sidebar when mouse is over it
-    if (x >= 0 && x < serverListWidth &&
+    if (authModal.isVisible() || cloudLoadState != CloudLoadState::Hidden) return;
+    if (settingsModal.isVisible()) return;
+
+    // Scroll sidebar when mouse is over it — consume event so camera doesn't zoom
+    if (appMode == AppMode::Designer && showUI &&
+        x >= 0 && x < serverListWidth &&
         y >= menuBarHeight && y < ofGetHeight() - statusBarHeight) {
         sidebarScroll -= scrollY * 20.0f;
         float panelH = ofGetHeight() - menuBarHeight - statusBarHeight;
         float maxScroll = std::max(0.0f, sidebarContentHeight - panelH);
         sidebarScroll = ofClamp(sidebarScroll, 0, maxScroll);
+        return; // don't let camera handle this scroll
     }
 }
 
@@ -654,17 +810,29 @@ void ofApp::drawMenuBar() {
     // File dropdown
     // items: {label, shortcut, isSeparator, isToggle, toggleState}
     if (fileMenuOpen) {
+        // Logged-in user email for display
+        std::string userLabel = authManager.isAuthenticated()
+            ? authManager.getSession().email
+            : "Not signed in";
+        if (userLabel.length() > 28) userLabel = userLabel.substr(0, 25) + "...";
+
         std::vector<std::tuple<std::string, std::string, bool, bool, bool>> items = {
-            {"New Project",     "",              false, false, false},
-            {"Open Project",    "Ctrl+O",        false, false, false},
-            {"Save Project",    "Ctrl+S",        false, false, false},
-            {"Save Project As", "Ctrl+Shift+S",  false, false, false},
-            {"",                "",              true,  false, false},
-            {"Autosave (15s)",  "",              false, true,  autosaveEnabled},
-            {"",                "",              true,  false, false},
-            {"Quit",            "",              false, false, false},
+            {"New Project",       "",             false, false, false},
+            {"Open Project",      "Ctrl+O",       false, false, false},
+            {"Save Project",      "Ctrl+S",       false, false, false},
+            {"Save Project As",   "Ctrl+Shift+S", false, false, false},
+            {"Save to Cloud",     "",             false, false, false},
+            {"Load from Cloud",   "",             false, false, false},
+            {"",                  "",             true,  false, false},
+            {"Autosave (15s)",    "",             false, true,  autosaveEnabled},
+            {"Preferences...",    "",             false, false, false},
+            {"",                  "",             true,  false, false},
+            {userLabel,           "",             false, false, false},
+            {"Log Out",           "",             false, false, false},
+            {"",                  "",             true,  false, false},
+            {"Quit",              "",             false, false, false},
         };
-        drawDropdown(fileX - 5, menuBarHeight, 220, items);
+        drawDropdown(fileX - 5, menuBarHeight, 240, items);
     }
 
     // View dropdown
@@ -674,7 +842,7 @@ void ofApp::drawMenuBar() {
             {"",              "", true,  false, false},
             {"Position",      "", false, true, showPosition},
             {"Rotation",      "", false, true, showRotation},
-            {"Scale",         "", false, true, showScale},
+            {"Size",          "", false, true, showScale},
             {"Input Mapping", "", false, true, showCrop},
         };
         drawDropdown(viewX - 5, menuBarHeight, 200, items);
@@ -692,6 +860,7 @@ void ofApp::drawMenuBar() {
     // Help dropdown
     if (helpMenuOpen) {
         std::vector<std::tuple<std::string, std::string, bool, bool, bool>> items = {
+            {"Manual",            "", false, false, false},
             {"Check for Updates", "", false, false, false},
             {"",                  "", true,  false, false},
             {"About VirtualStage","", false, false, false},
@@ -751,10 +920,12 @@ bool ofApp::handleMenuClick(int x, int y) {
     }
 
     // File dropdown clicks
+    // Items (14 total): 0=New, 1=Open, 2=Save, 3=SaveAs, 4=SaveCloud, 5=LoadCloud,
+    //   6=sep, 7=Autosave, 8=Preferences, 9=sep, 10=UserEmail(disabled), 11=LogOut, 12=sep, 13=Quit
     if (fileMenuOpen) {
-        float dropX = fileX - 5, dropW = 220;
-        bool isSep[] = {false, false, false, false, true, false, true, false};
-        int total = 8;
+        float dropX = fileX - 5, dropW = 240;
+        bool isSep[] = {false,false,false,false,false,false,true,false,false,true,false,false,true,false};
+        int total = 14;
         float iy = menuBarHeight;
 
         if (x >= dropX && x <= dropX + dropW) {
@@ -767,15 +938,35 @@ bool ofApp::handleMenuClick(int x, int y) {
                         case 1: openProject(); break;
                         case 2: saveProject(false); break;
                         case 3: saveProject(true); break;
-                        case 5:
-                            if (!autosaveEnabled && currentProjectPath.empty()) {
-                                saveProject(false);
-                                if (currentProjectPath.empty()) break; // user cancelled
+                        case 4: saveToCloud(); break;
+                        case 5: loadFromCloud(); break;
+                        case 7: // Autosave toggle
+                            if (!autosaveEnabled && currentProjectPath.empty() && currentCloudProjectName.empty()) {
+                                // No save destination yet — ask user via text box
+                                // Enter a name → cloud; cancel → local save dialog
+                                std::string cloudName = ofSystemTextBoxDialog(
+                                    "Enter a name to save to Cloud (free)\nor cancel for local save:", "");
+                                if (!cloudName.empty()) {
+                                    currentCloudProjectName = cloudName;
+                                    saveToCloud();
+                                } else {
+                                    saveProject(false);
+                                    if (currentProjectPath.empty()) break;
+                                }
                             }
                             autosaveEnabled = !autosaveEnabled;
                             autosaveTimer = 0;
                             break;
-                        case 7: ofExit(); break;
+                        case 8: // Preferences
+                            settingsModal.show(&preferences);
+                            break;
+                        case 10: break; // User email — display only, no action
+                        case 11: // Log Out
+                            authManager.logout();
+                            authModal.show();
+                            cam.disableMouseInput();
+                            break;
+                        case 13: ofExit(); break;
                     }
                     return true;
                 }
@@ -844,9 +1035,9 @@ bool ofApp::handleMenuClick(int x, int y) {
     // Help dropdown clicks
     if (helpMenuOpen) {
         float dropX = helpX - 5, dropW = 200;
-        // items: Check for Updates, sep, About VirtualStage
-        bool isSepH[] = {false, true, false};
-        int totalH = 3;
+        // items: Manual, Check for Updates, sep, About VirtualStage
+        bool isSepH[] = {false, false, true, false};
+        int totalH = 4;
         float iy = menuBarHeight;
 
         if (x >= dropX && x <= dropX + dropW) {
@@ -855,8 +1046,17 @@ bool ofApp::handleMenuClick(int x, int y) {
                 if (y >= iy && y < iy + itemH) {
                     helpMenuOpen = false;
                     switch (i) {
-                        case 0: checkForUpdates(); break;
-                        case 2:
+                        case 0: {
+                            std::string manualPath = ofToDataPath("manual.html", true);
+#ifdef TARGET_OSX
+                            system(("open \"" + manualPath + "\"").c_str());
+#elif defined(TARGET_WIN32)
+                            ShellExecuteA(NULL, "open", manualPath.c_str(), NULL, NULL, SW_SHOWNORMAL);
+#endif
+                            break;
+                        }
+                        case 1: checkForUpdates(); break;
+                        case 3:
                             showAboutDialog = true;
                             break;
                     }
@@ -1086,6 +1286,9 @@ void ofApp::newProject() {
     scene.clearSelection();
     propertiesPanel.setTarget(nullptr);
     currentProjectPath = "";
+    currentCloudProjectName = "";
+    autosaveEnabled = false;
+    autosaveTimer = 0;
 
     // Add a default screen
     scene.addScreen("Screen 1");
@@ -1132,6 +1335,37 @@ void ofApp::saveProject(bool saveAs) {
     }
 }
 
+void ofApp::doAutosave() {
+    if (!currentCloudProjectName.empty()) {
+        // Cloud autosave — serialize and upload silently
+        ofJson camJson;
+        auto camPos = cam.getPosition();
+        auto camTgt = cam.getTarget().getPosition();
+        camJson["position"] = {camPos.x, camPos.y, camPos.z};
+        camJson["target"]   = {camTgt.x, camTgt.y, camTgt.z};
+        camJson["distance"] = cam.getDistance();
+
+        std::string tmpPath = ofFilePath::getUserHomeDir() + "/.virtualstage/autosave_tmp.json";
+        if (scene.saveProject(tmpPath, camJson)) {
+            ofBuffer buf = ofBufferFromFile(tmpPath);
+            ofFile::removeFile(tmpPath);
+            if (buf.size() > 0) {
+                try {
+                    ofJson data = ofJson::parse(buf.getText());
+                    std::string name = currentCloudProjectName;
+                    std::thread([this, data, name]() {
+                        std::string err;
+                        cloudStorage.saveProject(authManager.getSession(), data, name, err);
+                    }).detach();
+                } catch (...) {}
+            }
+        }
+    } else if (!currentProjectPath.empty()) {
+        // Local autosave
+        saveProject(false);
+    }
+}
+
 void ofApp::openProject() {
     auto result = ofSystemLoadDialog("Open VirtualStage Project", false, "");
     if (!result.bSuccess) return;
@@ -1139,6 +1373,9 @@ void ofApp::openProject() {
     ofJson camJson;
     if (scene.loadProject(result.filePath, &camJson)) {
         currentProjectPath = result.filePath;
+        currentCloudProjectName = ""; // local project
+        autosaveEnabled = true;
+        autosaveTimer = 0;
 
         // Restore camera
         if (camJson.contains("position") && camJson["position"].is_array() && camJson["position"].size() >= 3) {
@@ -1168,6 +1405,24 @@ void ofApp::openProject() {
 }
 
 void ofApp::keyPressed(int key) {
+    // Auth modal intercepts all keys while visible
+    if (authModal.isVisible()) {
+        authModal.keyPressed(key);
+        return;
+    }
+
+    // Settings modal intercepts keys while visible
+    if (settingsModal.isVisible()) {
+        settingsModal.keyPressed(key);
+        return;
+    }
+
+    // Cloud load modal: ESC to close
+    if (cloudLoadState != CloudLoadState::Hidden) {
+        if (key == OF_KEY_ESC) cloudLoadState = CloudLoadState::Hidden;
+        return;
+    }
+
     // Close menus on any key press
     if (fileMenuOpen || viewMenuOpen || linkMenuOpen || helpMenuOpen || contextMenuOpen) {
         fileMenuOpen = false;
@@ -1890,6 +2145,24 @@ void ofApp::drawMappingMode() {
 }
 
 void ofApp::mousePressed(int x, int y, int button) {
+    // Auth modal intercepts all clicks while visible
+    if (authModal.isVisible()) {
+        authModal.mousePressed(x, y);
+        return;
+    }
+
+    // Settings modal
+    if (settingsModal.isVisible()) {
+        settingsModal.mousePressed(x, y);
+        return;
+    }
+
+    // Cloud load modal
+    if (cloudLoadState != CloudLoadState::Hidden) {
+        handleCloudLoadModalClick(x, y);
+        return;
+    }
+
     // Close About dialog on any click
     if (showAboutDialog) {
         showAboutDialog = false;
@@ -1907,8 +2180,11 @@ void ofApp::mousePressed(int x, int y, int button) {
         return;
     }
 
-    // Right-click: context menu on screens
+    // Right-click: edit parameter values or context menu on screens
     if (button == OF_MOUSE_BUTTON_RIGHT) {
+        // Properties panel: right-click to type a value
+        if (propertiesPanel.handleRightClick(x, y)) return;
+
         if (contextMenuOpen) {
             contextMenuOpen = false;
             return;
@@ -2060,6 +2336,8 @@ void ofApp::mousePressed(int x, int y, int button) {
 }
 
 void ofApp::mouseDragged(int x, int y, int button) {
+    if (authModal.isVisible() || cloudLoadState != CloudLoadState::Hidden) return;
+
     // --- Mapping mode drag ---
     if (mappingMode && mapDrag != MapDrag::None) {
         auto* screen = scene.getScreen(scene.getPrimarySelected());
@@ -2133,6 +2411,8 @@ void ofApp::mouseDragged(int x, int y, int button) {
 }
 
 void ofApp::mouseReleased(int x, int y, int button) {
+    if (authModal.isVisible() || cloudLoadState != CloudLoadState::Hidden) return;
+
     // Restore cursor when middle-click released
     if (button == OF_MOUSE_BUTTON_MIDDLE && middleMouseDown) {
         middleMouseDown = false;
@@ -2564,4 +2844,269 @@ void ofApp::drawAboutDialog() {
     ofDrawBitmapString("Click anywhere to close", px + panelW / 2 - 92, py + panelH - 10);
 
     ofSetColor(255);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════════════════════════════════════════
+
+void ofApp::handleAuthSubmit(AuthModal::Tab tab,
+                              const std::string& email,
+                              const std::string& password,
+                              const std::string& confirm) {
+    // Basic client-side validation
+    if (email.empty() || password.empty()) {
+        authModal.setError("Email and password are required.");
+        return;
+    }
+    if (tab == AuthModal::Tab::Register && password != confirm) {
+        authModal.setError("Passwords do not match.");
+        return;
+    }
+    if (password.size() < 6) {
+        authModal.setError("Password must be at least 6 characters.");
+        return;
+    }
+
+    // Run auth in background thread to avoid freezing the render loop
+    std::thread([this, tab, email, password]() {
+        std::string err;
+        bool success     = false;
+        bool needConfirm = false;
+
+        if (tab == AuthModal::Tab::Login) {
+            success = authManager.login(email, password, err);
+        } else {
+            success = authManager.signup(email, password, err, needConfirm);
+        }
+
+        std::lock_guard<std::mutex> lock(authResultMutex);
+        pendingAuthResult.done        = true;
+        pendingAuthResult.success     = success;
+        pendingAuthResult.needConfirm = needConfirm;
+        pendingAuthResult.error       = err;
+    }).detach();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CLOUD STORAGE
+// ══════════════════════════════════════════════════════════════════════════════
+
+void ofApp::saveToCloud() {
+    if (!authManager.isAuthenticated()) {
+        authModal.show();
+        return;
+    }
+
+    // Determine project name
+    std::string name;
+    if (!currentCloudProjectName.empty()) {
+        name = currentCloudProjectName; // already a cloud project
+    } else if (!currentProjectPath.empty()) {
+        name = ofFilePath::getBaseName(currentProjectPath);
+    } else {
+        std::string result = ofSystemTextBoxDialog("Cloud project name:", "Untitled");
+        if (result.empty()) return;
+        name = result;
+    }
+
+    // Serialize current project to JSON
+    ofJson camJson;
+    auto camPos = cam.getPosition();
+    auto camTgt = cam.getTarget().getPosition();
+    camJson["position"] = {camPos.x, camPos.y, camPos.z};
+    camJson["target"]   = {camTgt.x, camTgt.y, camTgt.z};
+    camJson["distance"] = cam.getDistance();
+
+    // Write to a temp file, then read back (reuse existing serializer)
+    std::string tmpPath = ofFilePath::getUserHomeDir() + "/.virtualstage/cloud_save_tmp.json";
+    if (!scene.saveProject(tmpPath, camJson)) {
+        ofSystemAlertDialog("Failed to serialize project.");
+        return;
+    }
+    ofBuffer buf = ofBufferFromFile(tmpPath);
+    ofFile::removeFile(tmpPath);
+    if (buf.size() == 0) {
+        ofSystemAlertDialog("Failed to read project for upload.");
+        return;
+    }
+    ofJson projectData;
+    try {
+        projectData = ofJson::parse(buf.getText());
+    } catch (...) {
+        ofSystemAlertDialog("Failed to parse project JSON.");
+        return;
+    }
+
+    currentCloudProjectName = name;
+
+    // Upload in a background thread
+    std::thread([this, projectData, name]() {
+        std::string err;
+        if (!cloudStorage.saveProject(authManager.getSession(), projectData, name, err)) {
+            ofLogError("CloudStorage") << "Save failed: " << err;
+        }
+    }).detach();
+}
+
+void ofApp::loadFromCloud() {
+    if (!authManager.isAuthenticated()) {
+        authModal.show();
+        return;
+    }
+
+    cloudLoadState = CloudLoadState::Loading;
+    cloudProjects.clear();
+    cloudLoadError.clear();
+
+    std::thread([this]() {
+        std::string err;
+        std::vector<CloudStorage::CloudProject> projects;
+        if (cloudStorage.listProjects(authManager.getSession(), projects, err)) {
+            // Store in member on main thread via flag
+            // Direct assignment is safe here since cloudLoadState == Loading
+            // and the main thread only reads these when state == Loaded/Error
+            cloudProjects  = projects;
+            cloudLoadState = CloudLoadState::Loaded;
+        } else {
+            cloudLoadError = err;
+            cloudLoadState = CloudLoadState::Error;
+        }
+    }).detach();
+}
+
+void ofApp::drawCloudLoadModal() {
+    float W = ofGetWidth();
+    float H = ofGetHeight();
+
+    // Dim background
+    ofSetColor(0, 0, 0, 160);
+    ofDrawRectangle(0, 0, W, H);
+
+    float panelW = 400;
+    float panelH = 350;
+    float px     = (W - panelW) / 2;
+    float py     = (H - panelH) / 2;
+
+    // Shadow + panel
+    ofSetColor(0, 0, 0, 100);
+    ofDrawRectangle(px + 5, py + 5, panelW, panelH);
+    ofSetColor(38, 38, 38);
+    ofDrawRectangle(px, py, panelW, panelH);
+
+    // Border
+    ofNoFill();
+    ofSetLineWidth(2);
+    ofSetColor(0, 120, 200);
+    ofDrawRectangle(px, py, panelW, panelH);
+    ofFill();
+    ofSetLineWidth(1);
+
+    // Title
+    ofSetColor(0, 180, 255);
+    ofDrawBitmapString("Load from Cloud", px + (panelW - 15 * 8) / 2, py + 28);
+
+    // Separator
+    ofSetColor(60);
+    ofDrawLine(px + 10, py + 38, px + panelW - 10, py + 38);
+
+    float listY = py + 48;
+
+    if (cloudLoadState == CloudLoadState::Loading) {
+        int dots = (int)(ofGetElapsedTimef() * 3) % 4;
+        ofSetColor(180);
+        ofDrawBitmapString("Loading" + std::string(dots, '.'), px + panelW / 2 - 30, py + panelH / 2);
+
+    } else if (cloudLoadState == CloudLoadState::Error) {
+        ofSetColor(255, 80, 80);
+        ofDrawBitmapString("Error: " + cloudLoadError, px + 16, listY + 20);
+
+    } else if (cloudLoadState == CloudLoadState::Loaded) {
+        if (cloudProjects.empty()) {
+            ofSetColor(120);
+            ofDrawBitmapString("No saved projects found.", px + panelW / 2 - 96, py + panelH / 2);
+        } else {
+            // List items
+            float itemH = 36;
+            float mx    = ofGetMouseX();
+            float my    = ofGetMouseY();
+            for (int i = 0; i < (int)cloudProjects.size(); i++) {
+                float iy = listY + i * itemH;
+                if (iy + itemH > py + panelH - 50) break; // clip to panel
+
+                bool hover = (mx >= px + 8 && mx <= px + panelW - 8 &&
+                              my >= iy && my < iy + itemH);
+
+                if (hover) {
+                    ofSetColor(0, 80, 160);
+                    ofDrawRectangle(px + 8, iy, panelW - 16, itemH - 2);
+                }
+
+                ofSetColor(hover ? 255 : 210);
+                std::string nm = cloudProjects[i].name;
+                if (nm.length() > 32) nm = nm.substr(0, 29) + "...";
+                ofDrawBitmapString(nm, px + 16, iy + 14);
+
+                // Updated date (trim to date only)
+                std::string dt = cloudProjects[i].updatedAt;
+                if (dt.length() > 10) dt = dt.substr(0, 10);
+                ofSetColor(hover ? 200 : 100);
+                ofDrawBitmapString(dt, px + panelW - 16 - dt.length() * 8, iy + 14);
+
+                // Separator
+                ofSetColor(50);
+                ofDrawLine(px + 8, iy + itemH - 1, px + panelW - 8, iy + itemH - 1);
+            }
+        }
+    }
+
+    // Close hint
+    ofSetColor(80);
+    ofDrawBitmapString("Press Esc or click outside to close", px + (panelW - 36 * 8) / 2, py + panelH - 12);
+
+    ofSetColor(255);
+}
+
+bool ofApp::handleCloudLoadModalClick(int x, int y) {
+    float W = ofGetWidth();
+    float H = ofGetHeight();
+    float panelW = 400;
+    float panelH = 350;
+    float px     = (W - panelW) / 2;
+    float py     = (H - panelH) / 2;
+
+    // Click outside panel = close
+    if (x < px || x > px + panelW || y < py || y > py + panelH) {
+        cloudLoadState = CloudLoadState::Hidden;
+        return true;
+    }
+
+    if (cloudLoadState != CloudLoadState::Loaded || cloudProjects.empty()) return true;
+
+    float listY = py + 48;
+    float itemH = 36;
+    for (int i = 0; i < (int)cloudProjects.size(); i++) {
+        float iy = listY + i * itemH;
+        if (iy + itemH > py + panelH - 50) break;
+        if (x >= px + 8 && x <= px + panelW - 8 &&
+            y >= iy && y < iy + itemH) {
+            // Load this project
+            cloudLoadState = CloudLoadState::Loading;
+            std::string projId   = cloudProjects[i].id;
+            std::string projName = cloudProjects[i].name;
+            std::thread([this, projId, projName]() {
+                std::string err;
+                ofJson data;
+                bool ok = cloudStorage.loadProject(authManager.getSession(), projId, data, err);
+                std::lock_guard<std::mutex> lock(cloudProjectResultMutex);
+                pendingCloudProject.done    = true;
+                pendingCloudProject.success = ok;
+                pendingCloudProject.error   = err;
+                pendingCloudProject.name    = projName;
+                pendingCloudProject.data    = data;
+            }).detach();
+            return true;
+        }
+    }
+    return true;
 }

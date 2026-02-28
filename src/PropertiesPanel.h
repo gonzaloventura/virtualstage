@@ -2,6 +2,7 @@
 #include "ofMain.h"
 #include "ofxGui.h"
 #include "ScreenObject.h"
+#include "Preferences.h"
 #include <functional>
 
 class PropertiesPanel {
@@ -24,8 +25,15 @@ public:
     // Group visibility (completely show/hide groups from panel)
     void updateGroupVisibility(bool ambient, bool pos, bool rot, bool scale, bool crop);
 
+    // Preferences (unit conversion for width/height display)
+    void setPreferences(Preferences* p) { preferences = p; }
+    void refreshUnitLabels();
+
     // Ambient light (0-100, default 60)
     float getAmbientLight() const { return ambientLight; }
+
+    // Right-click on a slider to type a value. Returns true if handled.
+    bool handleRightClick(int x, int y);
 
 private:
     ofxPanel panel; // header + labels only
@@ -40,8 +48,8 @@ private:
     ofParameter<float> rotX{"Pitch", 0, -180, 180};
     ofParameter<float> rotY{"Yaw", 0, -180, 180};
     ofParameter<float> rotZ{"Roll", 0, -180, 180};
-    ofParameter<float> scaleX{"Scale X", 1, 0.1, 10};
-    ofParameter<float> scaleY{"Scale Y", 1, 0.1, 10};
+    ofParameter<float> widthParam{"Width (m)", 3.2, 0.01, 100};
+    ofParameter<float> heightParam{"Height (m)", 1.8, 0.01, 100};
 
     ofParameter<float> curvatureParam{"Curvature", 0, -180, 180};
 
@@ -54,13 +62,14 @@ private:
     ofxGuiGroup ambientGui;
     ofxGuiGroup posGui;
     ofxGuiGroup rotGui;
-    ofxGuiGroup scaleGui;
+    ofxGuiGroup sizeGui;
     ofxGuiGroup curvatureGui;
     ofxGuiGroup cropGui;
 
     ofxLabel nameLabel;
     ofxLabel sourceLabel;
 
+    Preferences* preferences = nullptr;
     ScreenObject* target = nullptr;
     std::vector<ScreenObject*> multiTargets;
     bool visible = true;
@@ -71,7 +80,7 @@ private:
     // Delta tracking for multi-target editing
     glm::vec3 lastPos;
     glm::vec3 lastRot;
-    glm::vec2 lastScale;
+    glm::vec2 lastSize;
     float lastCurvature = 0;
 
     // Group visibility flags
