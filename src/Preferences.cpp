@@ -51,8 +51,8 @@ void Preferences::saveLocal() {
     std::lock_guard<std::mutex> lock(mtx);
     // Ensure directory exists
     std::string dir = getPrefsDir();
-#ifdef _WIN32
-    _mkdir(dir.c_str());
+#ifdef TARGET_WIN32
+    mkdir(dir.c_str());
 #else
     mkdir(dir.c_str(), 0755);
 #endif
