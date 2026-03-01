@@ -2522,7 +2522,7 @@ void ofApp::checkForUpdates() {
                           "Invoke-RestMethod -Uri 'https://api.github.com/repos/gonzaloventura/virtualstage/releases/latest' "
                           "-Headers @{'User-Agent'='VirtualStage/" APP_VERSION "'} "
                           "| ConvertTo-Json -Depth 10 | Out-File -Encoding utf8 '" + tmpPath + "'\"";
-        ret = system(cmd.c_str());
+        ret = silentSystem(cmd);
 #endif
         if (ret != 0) {
             updateState = UpdateState::Error;

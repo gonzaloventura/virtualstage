@@ -27,7 +27,7 @@ void CloudStorage::ensureTmpDir() const {
 #ifdef TARGET_OSX
     mkdir(d.c_str(), 0700);
 #elif defined(TARGET_WIN32)
-    system(("mkdir \"" + d + "\" 2>nul").c_str());
+    CreateDirectoryA(d.c_str(), NULL);
 #endif
 }
 
@@ -90,7 +90,11 @@ bool CloudStorage::restRequest(const std::string& method,
     }
 #endif
 
+#ifdef TARGET_WIN32
+    silentSystem(cmd);
+#else
     system(cmd.c_str());
+#endif
 
     if (hasBody) std::remove(bodyFile.c_str());
 

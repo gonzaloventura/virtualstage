@@ -34,7 +34,7 @@ void AuthManager::ensureVsDir() const {
 #ifdef TARGET_OSX
     mkdir(d.c_str(), 0700);
 #elif defined(TARGET_WIN32)
-    system(("mkdir \"" + d + "\" 2>nul").c_str());
+    CreateDirectoryA(d.c_str(), NULL);
 #endif
 }
 
@@ -142,7 +142,11 @@ bool AuthManager::httpPost(const std::string& url,
            "-OutFile '" + respFile + "'\"";
 #endif
 
+#ifdef TARGET_WIN32
+    silentSystem(cmd);
+#else
     system(cmd.c_str());
+#endif
     std::remove(bodyFile.c_str());
 
     std::ifstream rf(respFile);

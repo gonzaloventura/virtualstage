@@ -14,4 +14,32 @@
 #undef WIN32_LEAN_AND_MEAN
 #include <rpc.h>
 #include <ole2.h>
+
+// Run a shell command without showing a console window.
+// Equivalent to system() but with CREATE_NO_WINDOW flag.
+#include <string>
+static inline int silentSystem(const std::string& cmd) {
+    std::string full = "cmd.exe /c " + cmd;
+    // CreateProcessA needs a mutable buffer
+    char* buf = new char[full.size() + 1];
+    memcpy(buf, full.c_str(), full.size() + 1);
+
+    STARTUPINFOA si = {};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    PROCESS_INFORMATION pi = {};
+
+    BOOL ok = CreateProcessA(NULL, buf, NULL, NULL, FALSE,
+                             CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+    delete[] buf;
+    if (!ok) return -1;
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD exitCode = 0;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return (int)exitCode;
+}
 #endif
