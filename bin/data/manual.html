@@ -3,92 +3,74 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VirtualStage - User Manual</title>
+<title>VirtualStage — User Manual</title>
 <style>
-  :root {
-    --bg: #1a1a2e;
-    --bg2: #16213e;
-    --bg3: #0f3460;
-    --accent: #00c8ff;
-    --accent2: #e94560;
-    --text: #e0e0e0;
-    --text2: #a0a0a0;
-    --border: #2a2a4a;
-    --card: #1e1e3a;
-    --green: #00dc82;
-  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
-    background: var(--bg);
-    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: #ffffff;
+    color: #111111;
     line-height: 1.7;
     font-size: 15px;
   }
+  a { color: #111; }
+  a:hover { color: #737373; }
   .lang-toggle {
     position: fixed;
-    top: 16px;
+    top: 20px;
     right: 24px;
     z-index: 100;
     display: flex;
-    gap: 0;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    background: var(--bg2);
+    gap: 16px;
+    font-size: 14px;
   }
   .lang-toggle button {
-    padding: 8px 18px;
+    background: none;
     border: none;
-    background: transparent;
-    color: var(--text2);
     cursor: pointer;
     font-size: 14px;
-    font-weight: 600;
-    transition: all 0.2s;
+    color: #737373;
+    padding: 0;
+    border-bottom: 1px solid transparent;
   }
   .lang-toggle button.active {
-    background: var(--accent);
-    color: #000;
+    color: #111;
+    border-bottom: 1px solid #111;
   }
-  .lang-toggle button:hover:not(.active) {
-    background: var(--border);
-    color: var(--text);
-  }
+  .lang-toggle button:hover { color: #111; }
   header {
-    background: linear-gradient(135deg, var(--bg2), var(--bg3));
-    padding: 60px 40px 40px;
+    padding: 60px 40px 32px;
     text-align: center;
-    border-bottom: 2px solid var(--accent);
+    border-bottom: 1px solid #e5e5e5;
   }
   header h1 {
-    font-size: 2.4em;
-    color: var(--accent);
-    margin-bottom: 8px;
-    letter-spacing: 2px;
+    font-size: 2em;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
   }
   header p {
-    color: var(--text2);
-    font-size: 1.1em;
+    color: #737373;
+    font-size: 1em;
+    font-weight: 400;
   }
   .container {
-    max-width: 900px;
+    max-width: 720px;
     margin: 0 auto;
-    padding: 40px 24px 80px;
+    padding: 48px 24px 80px;
   }
   nav {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 24px 32px;
-    margin-bottom: 40px;
+    margin-bottom: 48px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid #e5e5e5;
   }
   nav h2 {
-    color: var(--accent);
-    font-size: 1.1em;
-    margin-bottom: 12px;
+    font-size: 0.8em;
     text-transform: uppercase;
     letter-spacing: 1px;
+    color: #737373;
+    margin-bottom: 12px;
+    font-weight: 500;
   }
   nav ol {
     columns: 2;
@@ -96,29 +78,27 @@
     padding-left: 20px;
   }
   nav li {
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     break-inside: avoid;
+    font-size: 14px;
   }
-  nav a {
-    color: var(--text2);
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-  nav a:hover { color: var(--accent); }
+  nav a { text-decoration: none; }
   section {
-    margin-bottom: 48px;
+    margin-bottom: 40px;
+    padding-bottom: 40px;
+    border-bottom: 1px solid #e5e5e5;
   }
+  section:last-of-type { border-bottom: none; }
   h2 {
-    color: var(--accent);
-    font-size: 1.6em;
+    font-size: 1.4em;
+    font-weight: 600;
     margin-bottom: 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border);
+    letter-spacing: -0.3px;
   }
   h3 {
-    color: var(--green);
-    font-size: 1.15em;
-    margin: 24px 0 10px;
+    font-size: 1em;
+    font-weight: 600;
+    margin: 24px 0 8px;
   }
   p { margin-bottom: 12px; }
   ul, ol { margin-bottom: 12px; padding-left: 24px; }
@@ -130,82 +110,51 @@
     font-size: 14px;
   }
   th {
-    background: var(--bg3);
-    color: var(--accent);
     text-align: left;
-    padding: 10px 14px;
-    border: 1px solid var(--border);
+    padding: 8px 12px;
+    border-bottom: 2px solid #e5e5e5;
     font-weight: 600;
+    font-size: 13px;
   }
   td {
-    padding: 8px 14px;
-    border: 1px solid var(--border);
+    padding: 8px 12px;
+    border-bottom: 1px solid #e5e5e5;
   }
-  tr:nth-child(even) { background: rgba(255,255,255,0.02); }
   code {
-    background: var(--bg2);
+    background: #f5f5f5;
     padding: 2px 6px;
-    border-radius: 4px;
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 0.9em;
-    color: var(--accent);
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+    font-size: 0.88em;
   }
   pre {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
+    background: #f5f5f5;
+    border: 1px solid #e5e5e5;
+    padding: 14px 16px;
     overflow-x: auto;
     margin: 12px 0;
     font-size: 13px;
   }
   pre code { background: none; padding: 0; }
   kbd {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 2px 8px;
+    background: #f5f5f5;
+    border: 1px solid #e5e5e5;
+    padding: 1px 6px;
     font-family: inherit;
     font-size: 0.85em;
-    color: var(--accent);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
-  }
-  .diagram {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
-    margin: 16px 0;
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 13px;
-    line-height: 1.4;
-    white-space: pre;
-    overflow-x: auto;
-    color: var(--text2);
   }
   .tip {
-    background: rgba(0, 200, 255, 0.08);
-    border-left: 3px solid var(--accent);
-    padding: 12px 16px;
-    border-radius: 0 8px 8px 0;
+    border-left: 2px solid #e5e5e5;
+    padding: 8px 16px;
     margin: 16px 0;
-  }
-  .tip::before {
-    content: 'Tip';
-    display: block;
-    font-weight: 700;
-    color: var(--accent);
-    font-size: 0.85em;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 4px;
+    color: #737373;
+    font-style: italic;
   }
   .hidden { display: none !important; }
   @media (max-width: 600px) {
     nav ol { columns: 1; }
-    header { padding: 40px 20px 30px; }
-    header h1 { font-size: 1.8em; }
-    .container { padding: 24px 16px 60px; }
+    header { padding: 40px 20px 24px; }
+    header h1 { font-size: 1.6em; }
+    .container { padding: 32px 16px 60px; }
   }
 </style>
 </head>
@@ -216,7 +165,7 @@
   <button id="btn-es" onclick="setLang('es')">ES</button>
 </div>
 
-<!-- ===== ENGLISH ===== -->
+<!-- ENGLISH -->
 <div id="lang-en">
 
 <header>
@@ -266,29 +215,14 @@
 
 <section id="en-interface">
   <h2>Interface Overview</h2>
-  <div class="diagram">+-------------------------------------------------------+
-|  File  View  Link  Help   [Autosave ON]               |  Menu Bar
-+----------+--------------------------------------------+
-|          |                                            |
-| SCREENS  |                                            |
-|  Screen1 |           3D Viewport                      |
-|  Screen2 |                                            |
-|          |                                            |
-|----------|                                            |
-| SERVERS  |                                            |
-|  Source1  |                                            |
-|  Source2  |         [W] Move  [E] Rotate  [R] Scale   |  Toolbar
-+----------+--------------------------------------------+
-| DESIGNER | project.json | FPS: 60 | Servers: 2 | ... |  Status Bar
-+-------------------------------------------------------+</div>
-
+  <p>The application window is divided into the following areas:</p>
   <ul>
-    <li><strong>Menu Bar</strong> &mdash; File (new, open, save, cloud, autosave, quit), View (toggle property panels), Link (Resolume import), Help (manual, about)</li>
-    <li><strong>Sidebar</strong> &mdash; <em>SCREENS</em>: lists all screens (click to select, [X] to delete). <em>SERVERS</em>: available video sources (click to assign to selected screen)</li>
-    <li><strong>3D Viewport</strong> &mdash; The main area where screens are displayed. Orbit, zoom, pan, select, and transform screens here</li>
-    <li><strong>Properties Panel</strong> (right) &mdash; Appears when a screen is selected. Edit Position, Rotation, Size, Curvature, Input Mapping, and Ambient Light</li>
-    <li><strong>Toolbar</strong> (bottom center) &mdash; Shows the active gizmo mode (Move, Rotate, Scale)</li>
-    <li><strong>Status Bar</strong> &mdash; Current mode (DESIGNER / VIEW), project name, FPS, server count</li>
+    <li><strong>Menu Bar</strong> — File (new, open, save, cloud, autosave, quit), View (toggle property panels), Link (Resolume import), Help (manual, about)</li>
+    <li><strong>Sidebar</strong> — Contains two sections. <em>Screens</em> lists all screens in the project (click to select, X button to delete). <em>Servers</em> lists available video sources (click to assign to the selected screen).</li>
+    <li><strong>3D Viewport</strong> — The main area where screens are displayed. Orbit, zoom, pan, select, and transform screens here.</li>
+    <li><strong>Properties Panel</strong> — Appears on the right when a screen is selected. Edit Position, Rotation, Size, Curvature, Input Mapping, and Ambient Light.</li>
+    <li><strong>Toolbar</strong> — Bottom center. Shows the active gizmo mode: Move, Rotate, or Scale.</li>
+    <li><strong>Status Bar</strong> — Bottom. Shows the current mode (Designer or View), project name, FPS, and server count.</li>
   </ul>
 
   <h3>Work Modes</h3>
@@ -306,9 +240,9 @@
 
   <h3>Screen Types</h3>
   <ul>
-    <li><strong>Flat</strong> &mdash; Standard rectangular screen (default)</li>
-    <li><strong>Curved</strong> &mdash; Cylindrical arc, activated by changing the Curvature parameter (-180&deg; to +180&deg;)</li>
-    <li><strong>Polygon</strong> &mdash; Non-rectangular masked screen, created when importing polygons from Resolume</li>
+    <li><strong>Flat</strong> — Standard rectangular screen (default)</li>
+    <li><strong>Curved</strong> — Cylindrical arc, activated by changing the Curvature parameter (−180° to +180°)</li>
+    <li><strong>Polygon</strong> — Non-rectangular masked screen, created when importing polygons from Resolume</li>
   </ul>
 
   <h3>Transforming</h3>
@@ -320,7 +254,7 @@
   <p>VirtualStage receives real-time video via <strong>Syphon</strong> (macOS) or <strong>Spout</strong> (Windows) from apps like Resolume, MadMapper, TouchDesigner, OBS, etc.</p>
 
   <h3>Assigning</h3>
-  <p>Select a screen, then either click a server in the SERVERS sidebar list, press a number key (1-9), or right-click the screen and pick a server.</p>
+  <p>Select a screen, then either click a server in the Servers sidebar list, press a number key (1–9), or right-click the screen and pick a server.</p>
 
   <h3>Disconnecting</h3>
   <p>Select the screen and press D, or right-click &gt; <strong>Disconnect</strong>.</p>
@@ -342,12 +276,12 @@
   <h2>Projects</h2>
   <p>Projects are saved as <code>.json</code> files containing all screen data, transforms, sources, crop settings, and camera state.</p>
   <ul>
-    <li><strong>New</strong> &mdash; File &gt; New Project</li>
-    <li><strong>Save / Save As</strong> &mdash; Cmd/Ctrl+S or Cmd/Ctrl+Shift+S</li>
-    <li><strong>Open</strong> &mdash; Cmd/Ctrl+O (restores everything and activates autosave)</li>
-    <li><strong>Undo / Redo</strong> &mdash; Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z</li>
-    <li><strong>Autosave</strong> &mdash; Toggle from File &gt; Autosave (saves every 15s)</li>
-    <li><strong>Cloud</strong> &mdash; File &gt; Save to Cloud / Load from Cloud for cross-device access</li>
+    <li><strong>New</strong> — File &gt; New Project</li>
+    <li><strong>Save / Save As</strong> — Cmd/Ctrl+S or Cmd/Ctrl+Shift+S</li>
+    <li><strong>Open</strong> — Cmd/Ctrl+O (restores everything and activates autosave)</li>
+    <li><strong>Undo / Redo</strong> — Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z</li>
+    <li><strong>Autosave</strong> — Toggle from File &gt; Autosave (saves every 15s)</li>
+    <li><strong>Cloud</strong> — File &gt; Save to Cloud / Load from Cloud for cross-device access</li>
   </ul>
 </section>
 
@@ -366,7 +300,7 @@
     <tr><td><kbd>W</kbd></td><td>Gizmo: Translate mode</td></tr>
     <tr><td><kbd>E</kbd></td><td>Gizmo: Rotate mode</td></tr>
     <tr><td><kbd>R</kbd></td><td>Gizmo: Scale mode</td></tr>
-    <tr><td><kbd>1</kbd>&ndash;<kbd>9</kbd></td><td>Assign video server by number</td></tr>
+    <tr><td><kbd>1</kbd>–<kbd>9</kbd></td><td>Assign video server by number</td></tr>
     <tr><td><kbd>D</kbd></td><td>Disconnect video source</td></tr>
     <tr><td><kbd>M</kbd></td><td>Open/close Input Mapping editor</td></tr>
     <tr><td><kbd>L</kbd></td><td>Start Resolume import</td></tr>
@@ -376,7 +310,7 @@
     <tr><td><kbd>F3</kbd></td><td>Camera: 3/4 view</td></tr>
     <tr><td><kbd>0</kbd></td><td>Camera: Level (fix tilt)</td></tr>
     <tr><td><kbd>Cmd/Ctrl</kbd>+<kbd>S</kbd></td><td>Save project</td></tr>
-    <tr><td><kbd>Cmd/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Save as&hellip;</td></tr>
+    <tr><td><kbd>Cmd/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Save as…</td></tr>
     <tr><td><kbd>Cmd/Ctrl</kbd>+<kbd>O</kbd></td><td>Open project</td></tr>
     <tr><td><kbd>Cmd/Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td></tr>
     <tr><td><kbd>Cmd/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Redo</td></tr>
@@ -406,11 +340,10 @@
   </table>
 </section>
 
-</div><!-- container -->
-</div><!-- lang-en -->
+</div>
+</div>
 
-
-<!-- ===== SPANISH ===== -->
+<!-- SPANISH -->
 <div id="lang-es" class="hidden">
 
 <header>
@@ -460,29 +393,14 @@
 
 <section id="es-interface">
   <h2>Vista general de la interfaz</h2>
-  <div class="diagram">+-------------------------------------------------------+
-|  File  View  Link  Help   [Autosave ON]               |  Barra de menú
-+----------+--------------------------------------------+
-|          |                                            |
-| SCREENS  |                                            |
-|  Screen1 |           Vista 3D                         |
-|  Screen2 |          (Viewport)                        |
-|          |                                            |
-|----------|                                            |
-| SERVERS  |                                            |
-|  Source1  |                                            |
-|  Source2  |         [W] Move  [E] Rotate  [R] Scale   |  Toolbar
-+----------+--------------------------------------------+
-| DESIGNER | project.json | FPS: 60 | Servers: 2 | ... |  Barra de estado
-+-------------------------------------------------------+</div>
-
+  <p>La ventana de la aplicación se divide en las siguientes áreas:</p>
   <ul>
-    <li><strong>Barra de menú</strong> &mdash; File (nuevo, abrir, guardar, nube, autosave, salir), View (paneles de propiedades), Link (importar Resolume), Help (manual, acerca de)</li>
-    <li><strong>Panel lateral</strong> &mdash; <em>SCREENS</em>: lista todas las pantallas (clic para seleccionar, [X] para eliminar). <em>SERVERS</em>: fuentes de video disponibles (clic para asignar a la pantalla seleccionada)</li>
-    <li><strong>Vista 3D</strong> &mdash; El área principal donde se muestran las pantallas. Orbita, haz zoom, pan, selecciona y transforma pantallas aquí</li>
-    <li><strong>Panel de propiedades</strong> (derecha) &mdash; Aparece al seleccionar una pantalla. Edita Position, Rotation, Size, Curvature, Input Mapping y Ambient Light</li>
-    <li><strong>Toolbar</strong> (centro inferior) &mdash; Muestra el modo activo del gizmo (Move, Rotate, Scale)</li>
-    <li><strong>Barra de estado</strong> &mdash; Modo actual (DESIGNER / VIEW), nombre del proyecto, FPS, cantidad de servidores</li>
+    <li><strong>Barra de menú</strong> — File (nuevo, abrir, guardar, nube, autosave, salir), View (paneles de propiedades), Link (importar Resolume), Help (manual, acerca de)</li>
+    <li><strong>Panel lateral</strong> — Contiene dos secciones. <em>Screens</em> lista todas las pantallas del proyecto (clic para seleccionar, botón X para eliminar). <em>Servers</em> lista las fuentes de video disponibles (clic para asignar a la pantalla seleccionada).</li>
+    <li><strong>Vista 3D</strong> — El área principal donde se muestran las pantallas. Orbita, haz zoom, pan, selecciona y transforma pantallas aquí.</li>
+    <li><strong>Panel de propiedades</strong> — Aparece a la derecha al seleccionar una pantalla. Edita Position, Rotation, Size, Curvature, Input Mapping y Ambient Light.</li>
+    <li><strong>Toolbar</strong> — Centro inferior. Muestra el modo activo del gizmo: Move, Rotate o Scale.</li>
+    <li><strong>Barra de estado</strong> — Inferior. Muestra el modo actual (Designer o View), nombre del proyecto, FPS y cantidad de servidores.</li>
   </ul>
 
   <h3>Modos de trabajo</h3>
@@ -500,9 +418,9 @@
 
   <h3>Tipos de pantalla</h3>
   <ul>
-    <li><strong>Flat</strong> &mdash; Pantalla rectangular estándar (por defecto)</li>
-    <li><strong>Curved</strong> &mdash; Arco cilíndrico, se activa al cambiar el parámetro Curvature (-180° a +180°)</li>
-    <li><strong>Polygon</strong> &mdash; Pantalla con máscara no rectangular, se crea al importar polígonos desde Resolume</li>
+    <li><strong>Flat</strong> — Pantalla rectangular estándar (por defecto)</li>
+    <li><strong>Curved</strong> — Arco cilíndrico, se activa al cambiar el parámetro Curvature (−180° a +180°)</li>
+    <li><strong>Polygon</strong> — Pantalla con máscara no rectangular, se crea al importar polígonos desde Resolume</li>
   </ul>
 
   <h3>Transformar</h3>
@@ -514,7 +432,7 @@
   <p>VirtualStage recibe video en tiempo real vía <strong>Syphon</strong> (macOS) o <strong>Spout</strong> (Windows) desde apps como Resolume, MadMapper, TouchDesigner, OBS, etc.</p>
 
   <h3>Asignar</h3>
-  <p>Selecciona una pantalla, luego haz clic en un servidor en la lista SERVERS del sidebar, presiona una tecla numérica (1-9), o haz clic derecho y elige un servidor.</p>
+  <p>Selecciona una pantalla, luego haz clic en un servidor en la lista Servers del sidebar, presiona una tecla numérica (1–9), o haz clic derecho y elige un servidor.</p>
 
   <h3>Desconectar</h3>
   <p>Selecciona la pantalla y presiona D, o clic derecho &gt; <strong>Disconnect</strong>.</p>
@@ -536,12 +454,12 @@
   <h2>Proyectos</h2>
   <p>Los proyectos se guardan como archivos <code>.json</code> con todos los datos de pantallas, transformaciones, fuentes, crop y estado de cámara.</p>
   <ul>
-    <li><strong>Nuevo</strong> &mdash; File &gt; New Project</li>
-    <li><strong>Guardar / Guardar como</strong> &mdash; Cmd/Ctrl+S o Cmd/Ctrl+Shift+S</li>
-    <li><strong>Abrir</strong> &mdash; Cmd/Ctrl+O (restaura todo y activa autosave)</li>
-    <li><strong>Deshacer / Rehacer</strong> &mdash; Cmd/Ctrl+Z y Cmd/Ctrl+Shift+Z</li>
-    <li><strong>Autosave</strong> &mdash; Activa desde File &gt; Autosave (guarda cada 15s)</li>
-    <li><strong>Nube</strong> &mdash; File &gt; Save to Cloud / Load from Cloud para acceso entre dispositivos</li>
+    <li><strong>Nuevo</strong> — File &gt; New Project</li>
+    <li><strong>Guardar / Guardar como</strong> — Cmd/Ctrl+S o Cmd/Ctrl+Shift+S</li>
+    <li><strong>Abrir</strong> — Cmd/Ctrl+O (restaura todo y activa autosave)</li>
+    <li><strong>Deshacer / Rehacer</strong> — Cmd/Ctrl+Z y Cmd/Ctrl+Shift+Z</li>
+    <li><strong>Autosave</strong> — Activa desde File &gt; Autosave (guarda cada 15s)</li>
+    <li><strong>Nube</strong> — File &gt; Save to Cloud / Load from Cloud para acceso entre dispositivos</li>
   </ul>
 </section>
 
@@ -560,7 +478,7 @@
     <tr><td><kbd>W</kbd></td><td>Gizmo: Modo mover</td></tr>
     <tr><td><kbd>E</kbd></td><td>Gizmo: Modo rotar</td></tr>
     <tr><td><kbd>R</kbd></td><td>Gizmo: Modo escalar</td></tr>
-    <tr><td><kbd>1</kbd>&ndash;<kbd>9</kbd></td><td>Asignar servidor de video por número</td></tr>
+    <tr><td><kbd>1</kbd>–<kbd>9</kbd></td><td>Asignar servidor de video por número</td></tr>
     <tr><td><kbd>D</kbd></td><td>Desconectar fuente de video</td></tr>
     <tr><td><kbd>M</kbd></td><td>Abrir/cerrar editor de Input Mapping</td></tr>
     <tr><td><kbd>L</kbd></td><td>Iniciar importación Resolume</td></tr>
@@ -600,8 +518,8 @@
   </table>
 </section>
 
-</div><!-- container -->
-</div><!-- lang-es -->
+</div>
+</div>
 
 <script>
 function setLang(lang) {
