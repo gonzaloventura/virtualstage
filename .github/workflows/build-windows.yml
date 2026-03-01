@@ -162,11 +162,25 @@ jobs:
 
           cd artifact && zip -r "${GITHUB_WORKSPACE}/VirtualStage-Windows.zip" .
 
-      - name: Upload artifact
+      - name: Build installer
+        shell: pwsh
+        run: |
+          Copy-Item "installer.iss" -Destination "."
+          Copy-Item "icon.ico" -Destination "."
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer.iss"
+          Move-Item "VirtualStage-Setup.exe" "$env:GITHUB_WORKSPACE\VirtualStage-Setup.exe"
+
+      - name: Upload artifact (ZIP)
         uses: actions/upload-artifact@v4
         with:
           name: VirtualStage-Windows
           path: VirtualStage-Windows.zip
+
+      - name: Upload artifact (Installer)
+        uses: actions/upload-artifact@v4
+        with:
+          name: VirtualStage-Installer
+          path: VirtualStage-Setup.exe
 
   # ───────────────────────────── macOS (Syphon) ──────────────────────────────
   build-macos:
@@ -307,6 +321,7 @@ jobs:
         with:
           files: |
             VirtualStage-Windows/VirtualStage-Windows.zip
+            VirtualStage-Installer/VirtualStage-Setup.exe
             VirtualStage-macOS/VirtualStage-macOS.zip
           generate_release_notes: true
           body: |
@@ -318,4 +333,6 @@ jobs:
             ```
             Then open the app normally.
 
-            **Windows:** Unzip and run `VirtualStage.exe`.
+            **Windows (Installer):** Download `VirtualStage-Setup.exe` and run the installer.
+
+            **Windows (Portable):** Download `VirtualStage-Windows.zip`, unzip and run `VirtualStage.exe`.

@@ -1306,11 +1306,18 @@ void ofApp::newProject() {
 
 // --- Project Save/Load ---
 
+static std::string getDefaultProjectsDir() {
+    std::string docs = ofFilePath::getUserHomeDir() + "/Documents/VirtualStage";
+    ofDirectory dir(docs);
+    if (!dir.exists()) dir.create(true);
+    return docs;
+}
+
 void ofApp::saveProject(bool saveAs) {
     std::string path = currentProjectPath;
 
     if (saveAs || path.empty()) {
-        auto result = ofSystemSaveDialog("project.json", "Save VirtualStage Project");
+        auto result = ofSystemSaveDialog(getDefaultProjectsDir() + "/project.json", "Save VirtualStage Project");
         if (!result.bSuccess) return;
         path = result.filePath;
         // Ensure .json extension
@@ -1367,7 +1374,7 @@ void ofApp::doAutosave() {
 }
 
 void ofApp::openProject() {
-    auto result = ofSystemLoadDialog("Open VirtualStage Project", false, "");
+    auto result = ofSystemLoadDialog("Open VirtualStage Project", false, getDefaultProjectsDir());
     if (!result.bSuccess) return;
 
     ofJson camJson;
