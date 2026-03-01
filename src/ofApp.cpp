@@ -1047,11 +1047,11 @@ bool ofApp::handleMenuClick(int x, int y) {
                     helpMenuOpen = false;
                     switch (i) {
                         case 0: {
-                            std::string manualPath = ofToDataPath("manual.html", true);
+                            std::string url = "https://ventu.dev/virtualstage/manual";
 #ifdef TARGET_OSX
-                            system(("open \"" + manualPath + "\"").c_str());
+                            system(("open \"" + url + "\"").c_str());
 #elif defined(TARGET_WIN32)
-                            ShellExecuteA(NULL, "open", manualPath.c_str(), NULL, NULL, SW_SHOWNORMAL);
+                            silentSystem("start \"\" \"" + url + "\"");
 #endif
                             break;
                         }
