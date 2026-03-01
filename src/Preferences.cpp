@@ -8,6 +8,9 @@
 
 std::string Preferences::getPrefsDir() const {
     const char* home = getenv("HOME");
+#ifdef TARGET_WIN32
+    if (!home) home = getenv("USERPROFILE");
+#endif
     if (!home) home = "/tmp";
     return std::string(home) + "/.virtualstage";
 }

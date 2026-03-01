@@ -12,6 +12,9 @@
 
 static std::string getHomeDir() {
     const char* h = getenv("HOME");
+#ifdef TARGET_WIN32
+    if (!h) h = getenv("USERPROFILE");
+#endif
     return h ? std::string(h) : std::string("/tmp");
 }
 
