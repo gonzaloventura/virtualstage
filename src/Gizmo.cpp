@@ -202,21 +202,47 @@ void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam) {
         glm::vec3 worldDelta = dir * projectedDelta * worldScale;
 
         for (auto& state : dragTargets) {
-            state.target->setPosition(state.startPos + worldDelta);
+            glm::vec3 newPos = state.startPos + worldDelta;
+            if (snapEnabled) {
+                newPos.x = std::round(newPos.x / snapSize) * snapSize;
+                newPos.y = std::round(newPos.y / snapSize) * snapSize;
+                newPos.z = std::round(newPos.z / snapSize) * snapSize;
+            }
+            state.target->setPosition(newPos);
         }
 
     } else if (mode == Mode::Rotate) {
         float degrees = delta.x * 0.5f;
 
-        for (auto& state : dragTargets) {
-            glm::vec3 newRot = state.startRot;
-            switch (activeAxis) {
-                case Axis::X: newRot.x += degrees; break;
-                case Axis::Y: newRot.y += degrees; break;
-                case Axis::Z: newRot.z += degrees; break;
-                default: break;
+        // Mirror Yaw: when rotating Y axis with exactly 2 targets
+        bool doMirror = mirrorYaw && activeAxis == Axis::Y && dragTargets.size() == 2;
+
+        if (doMirror) {
+            // Determine left/right by starting X position
+            auto* stateA = &dragTargets[0];
+            auto* stateB = &dragTargets[1];
+            bool aIsLeft = (stateA->startPos.x < stateB->startPos.x - 0.1f)
+                        || (std::abs(stateA->startPos.x - stateB->startPos.x) <= 0.1f);
+            auto* left  = aIsLeft ? stateA : stateB;
+            auto* right = aIsLeft ? stateB : stateA;
+
+            glm::vec3 leftRot = left->startRot;
+            glm::vec3 rightRot = right->startRot;
+            leftRot.y += degrees;
+            rightRot.y -= degrees;
+            left->target->setRotationEuler(leftRot);
+            right->target->setRotationEuler(rightRot);
+        } else {
+            for (auto& state : dragTargets) {
+                glm::vec3 newRot = state.startRot;
+                switch (activeAxis) {
+                    case Axis::X: newRot.x += degrees; break;
+                    case Axis::Y: newRot.y += degrees; break;
+                    case Axis::Z: newRot.z += degrees; break;
+                    default: break;
+                }
+                state.target->setRotationEuler(newRot);
             }
-            state.target->setRotationEuler(newRot);
         }
 
     } else if (mode == Mode::Scale) {

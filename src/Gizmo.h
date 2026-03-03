@@ -24,6 +24,11 @@ public:
     Axis getActiveAxis() const { return activeAxis; }
 
     Mode mode = Mode::Translate;
+    bool mirrorYaw = false; // when true + 2 targets, Y-rotation is mirrored
+
+    // Snap to grid
+    bool snapEnabled = false;
+    float snapSize = 50.0f;
 
     std::string getModeString() const;
 

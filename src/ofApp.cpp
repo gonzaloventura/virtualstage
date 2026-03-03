@@ -778,11 +778,13 @@ void ofApp::drawStatusBar() {
                 ofSetColor(0, 200, 255);
                 hint = "SELECT  |  Drag to select  |  S:Exit  W/E/R:Exit";
             } else {
-                hint = gizmo.getModeString() +
+                hint = gizmo.getModeString();
+                if (gizmo.snapEnabled) hint += "  [SNAP]";
+                hint +=
 #ifdef TARGET_OSX
-                    "  |  S:Select  Shift+A:Screen  A:Slice  Del:Remove  L:Link  M:Map  H:UI  Tab:View";
+                    "  |  S:Select  G:Snap  Shift+A:Screen  A:Slice  Del:Remove  L:Link  M:Map  H:UI  Tab:View";
 #else
-                    "  |  S:Select  Shift+A:Screen  A:Slice  Del:Remove  L:Link  M:Map  H:UI  Tab:View";
+                    "  |  S:Select  G:Snap  Shift+A:Screen  A:Slice  Del:Remove  L:Link  M:Map  H:UI  Tab:View";
 #endif
             }
         }
@@ -2006,6 +2008,11 @@ void ofApp::keyPressed(int key) {
             }
             break;
         }
+
+        case 'g': case 'G':
+            gizmo.snapEnabled = !gizmo.snapEnabled;
+            ofLogNotice("ofApp") << "Snap to grid: " << (gizmo.snapEnabled ? "ON" : "OFF");
+            break;
 
         case 'h': case 'H':
             showUI = !showUI;
