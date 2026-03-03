@@ -1,5 +1,16 @@
 #include "win_byte_fix.h"
 #include "Scene.h"
+#include <algorithm>
+#include <cctype>
+
+// Case-insensitive substring check
+static bool containsIgnoreCase(const std::string& haystack, const std::string& needle) {
+    if (needle.empty()) return false;
+    std::string h = haystack, n = needle;
+    std::transform(h.begin(), h.end(), h.begin(), ::tolower);
+    std::transform(n.begin(), n.end(), n.begin(), ::tolower);
+    return h.find(n) != std::string::npos;
+}
 
 void Scene::setup() {
     light.setDirectional();
@@ -74,7 +85,7 @@ void Scene::drawGrid(float size, float step) {
 
 int Scene::addScreen(const std::string& name) {
     std::string screenName = name.empty()
-        ? "Screen " + ofToString(nextScreenId)
+        ? "Slice " + ofToString(nextScreenId)
         : name;
     nextScreenId++;
 
@@ -170,11 +181,116 @@ void Scene::assignSourceToScreen(int screenIndex, int serverIndex) {
 #endif
 }
 
+// --- Screen Group Management ---
+
+int Scene::addGroup(const std::string& name) {
+    ScreenGroup g;
+    g.id = nextGroupId++;
+    g.name = name.empty() ? ("Screen " + ofToString(g.id)) : name;
+    groups.push_back(g);
+    return g.id;
+}
+
+void Scene::removeGroup(int groupId) {
+    // Remove all slices belonging to this group (reverse order for stable indices)
+    for (int i = (int)screens.size() - 1; i >= 0; i--) {
+        if (screens[i]->groupId == groupId) {
+            removeScreen(i);
+        }
+    }
+    groups.erase(std::remove_if(groups.begin(), groups.end(),
+        [groupId](const ScreenGroup& g) { return g.id == groupId; }), groups.end());
+}
+
+ScreenGroup* Scene::getGroup(int groupId) {
+    for (auto& g : groups) {
+        if (g.id == groupId) return &g;
+    }
+    return nullptr;
+}
+
+int Scene::getGroupCount() const {
+    return (int)groups.size();
+}
+
+std::vector<int> Scene::getSliceIndicesForGroup(int groupId) const {
+    std::vector<int> result;
+    for (int i = 0; i < (int)screens.size(); i++) {
+        if (screens[i]->groupId == groupId) result.push_back(i);
+    }
+    return result;
+}
+
+int Scene::addSliceToGroup(int groupId, const std::string& name) {
+    int idx = addScreen(name);
+    screens[idx]->groupId = groupId;
+
+    // Auto-connect to group source if one is assigned
+    ScreenGroup* g = getGroup(groupId);
+    if (g && g->sourceIndex >= 0) {
+        assignSourceToScreen(idx, g->sourceIndex);
+    }
+    return idx;
+}
+
+void Scene::assignSourceToGroup(int groupId, int serverIndex) {
+    ScreenGroup* g = getGroup(groupId);
+    if (!g) return;
+
+    g->sourceIndex = serverIndex;
+
+    // Build display name
+#ifdef TARGET_OSX
+    if (directory.isValidIndex(serverIndex)) {
+        const auto& desc = directory.getDescription(serverIndex);
+        g->sourceName = desc.appName + " - " + desc.serverName;
+    }
+#elif defined(TARGET_WIN32)
+    if (serverIndex >= 0 && serverIndex < (int)spoutSenders.size()) {
+        g->sourceName = spoutSenders[serverIndex];
+    }
+#endif
+
+    // Connect all child slices
+    for (int i = 0; i < (int)screens.size(); i++) {
+        if (screens[i]->groupId == groupId) {
+            assignSourceToScreen(i, serverIndex);
+        }
+    }
+}
+
+void Scene::disconnectGroup(int groupId) {
+    ScreenGroup* g = getGroup(groupId);
+    if (!g) return;
+    g->sourceIndex = -1;
+    g->sourceName = "";
+    for (auto& screen : screens) {
+        if (screen->groupId == groupId) {
+            screen->disconnectSource();
+        }
+    }
+}
+
 #ifdef TARGET_OSX
 void Scene::onServerAnnounced(ofxSyphonServerDirectoryEventArgs& args) {
     for (const auto& s : args.servers) {
         ofLogNotice("Scene") << "Server announced: " << s.appName << " - " << s.serverName;
     }
+
+    // Auto-link: match new servers to unconnected groups by name
+    const auto& serverList = directory.getServerList();
+    for (auto& g : groups) {
+        if (g.sourceIndex >= 0) continue; // already connected
+        for (int i = 0; i < (int)serverList.size(); i++) {
+            std::string displayName = serverList[i].appName + " - " + serverList[i].serverName;
+            if (containsIgnoreCase(displayName, g.name)) {
+                assignSourceToGroup(g.id, i);
+                ofLogNotice("Scene") << "Auto-linked '" << g.name << "' to '" << displayName << "'";
+                break;
+            }
+        }
+    }
+
     if (onServerListChanged) onServerListChanged();
 }
 
@@ -219,6 +335,19 @@ void Scene::pollSpoutSenders() {
                 screen->disconnectSource();
             }
         }
+
+        // Auto-link: match new senders to unconnected groups by name
+        for (auto& g : groups) {
+            if (g.sourceIndex >= 0) continue; // already connected
+            for (int i = 0; i < (int)spoutSenders.size(); i++) {
+                if (containsIgnoreCase(spoutSenders[i], g.name)) {
+                    assignSourceToGroup(g.id, i);
+                    ofLogNotice("Scene") << "Auto-linked '" << g.name << "' to '" << spoutSenders[i] << "'";
+                    break;
+                }
+            }
+        }
+
         if (onServerListChanged) onServerListChanged();
     }
 }
@@ -228,49 +357,96 @@ void Scene::pollSpoutSenders() {
 
 bool Scene::saveProject(const std::string& path, const ofJson& cameraJson) const {
     ofJson root;
-    root["version"] = 1;
+    root["version"] = 2;
 
     if (!cameraJson.is_null()) {
         root["camera"] = cameraJson;
     }
 
-    ofJson screensArr = ofJson::array();
-    for (auto& screen : screens) {
-        screensArr.push_back(screen->toJson());
+    // Serialize groups with their child slices
+    ofJson groupsArr = ofJson::array();
+    for (const auto& g : groups) {
+        ofJson gj;
+        gj["id"] = g.id;
+        gj["name"] = g.name;
+        if (!g.sourceName.empty()) {
+            gj["sourceName"] = g.sourceName;
+        }
+
+        ofJson slicesArr = ofJson::array();
+        for (const auto& screen : screens) {
+            if (screen->groupId == g.id) {
+                slicesArr.push_back(screen->toJson());
+            }
+        }
+        gj["slices"] = slicesArr;
+        groupsArr.push_back(gj);
     }
-    root["screens"] = screensArr;
+    root["groups"] = groupsArr;
 
     return ofSavePrettyJson(path, root);
 }
 
 bool Scene::loadProject(const std::string& path, ofJson* outCameraJson) {
     ofJson root = ofLoadJson(path);
-    if (root.is_null() || !root.contains("screens")) {
-        ofLogError("Scene") << "Failed to load project or missing 'screens': " << path;
+    if (root.is_null()) {
+        ofLogError("Scene") << "Failed to load project: " << path;
         return false;
     }
 
-    // Clear existing screens
+    // Clear existing state
     screens.clear();
+    groups.clear();
     clearSelection();
     nextScreenId = 1;
+    nextGroupId = 1;
 
     // Load camera if present
     if (outCameraJson && root.contains("camera")) {
         *outCameraJson = root["camera"];
     }
 
-    // Load screens
-    for (auto& sj : root["screens"]) {
-        auto screen = std::make_unique<ScreenObject>();
-        screen->fromJson(sj);
-        screens.push_back(std::move(screen));
-        nextScreenId++;
+    int version = root.value("version", 1);
+
+    if (version >= 2 && root.contains("groups")) {
+        // v2 format: groups with nested slices
+        for (auto& gj : root["groups"]) {
+            ScreenGroup g;
+            g.id = gj.value("id", nextGroupId);
+            g.name = gj.value("name", "Screen " + ofToString(g.id));
+            g.sourceName = gj.value("sourceName", "");
+            if (g.id >= nextGroupId) nextGroupId = g.id + 1;
+
+            if (gj.contains("slices")) {
+                for (auto& sj : gj["slices"]) {
+                    auto screen = std::make_unique<ScreenObject>();
+                    screen->fromJson(sj);
+                    screen->groupId = g.id;
+                    screens.push_back(std::move(screen));
+                    nextScreenId++;
+                }
+            }
+            groups.push_back(g);
+        }
+    } else if (root.contains("screens")) {
+        // v1 legacy format: flat array — auto-wrap in default group
+        int defaultGroupId = addGroup("Screen 1");
+        for (auto& sj : root["screens"]) {
+            auto screen = std::make_unique<ScreenObject>();
+            screen->fromJson(sj);
+            screen->groupId = defaultGroupId;
+            screens.push_back(std::move(screen));
+            nextScreenId++;
+        }
+    } else {
+        ofLogError("Scene") << "No 'groups' or 'screens' found in: " << path;
+        return false;
     }
 
     reconnectSources();
 
-    ofLogNotice("Scene") << "Loaded project: " << screens.size() << " screens from " << path;
+    ofLogNotice("Scene") << "Loaded project: " << groups.size() << " screens, "
+                         << screens.size() << " slices from " << path;
     return true;
 }
 
@@ -303,6 +479,20 @@ void Scene::reconnectSources() {
         }
     }
 #endif
+
+    // Sync group-level source info from reconnected child slices
+    for (auto& g : groups) {
+        if (!g.sourceName.empty() && g.sourceIndex < 0) {
+            // Try to find the server index matching this group's saved sourceName
+            auto servers = getAvailableServers();
+            for (int i = 0; i < (int)servers.size(); i++) {
+                if (servers[i].displayName() == g.sourceName) {
+                    g.sourceIndex = i;
+                    break;
+                }
+            }
+        }
+    }
 }
 
 int Scene::pick(const ofCamera& cam, const glm::vec2& screenPos) {
