@@ -1119,6 +1119,9 @@ void ofApp::drawMenuBar() {
             {"Save to Cloud",     "",             false, false, false},
             {"Load from Cloud",   "",             false, false, false},
             {"",                  "",             true,  false, false},
+            {"Export Layout",     "",             false, false, false},
+            {"Import Layout",     "",             false, false, false},
+            {"",                  "",             true,  false, false},
             {"Autosave (15s)",    "",             false, true,  autosaveEnabled},
             {"Preferences...",    "",             false, false, false},
             {"",                  "",             true,  false, false},
@@ -1214,12 +1217,13 @@ bool ofApp::handleMenuClick(int x, int y) {
     }
 
     // File dropdown clicks
-    // Items (14 total): 0=New, 1=Open, 2=Save, 3=SaveAs, 4=SaveCloud, 5=LoadCloud,
-    //   6=sep, 7=Autosave, 8=Preferences, 9=sep, 10=UserEmail(disabled), 11=LogOut, 12=sep, 13=Quit
+    // Items (17 total): 0=New, 1=Open, 2=Save, 3=SaveAs, 4=SaveCloud, 5=LoadCloud,
+    //   6=sep, 7=ExportLayout, 8=ImportLayout, 9=sep,
+    //   10=Autosave, 11=Preferences, 12=sep, 13=UserEmail, 14=LogOut, 15=sep, 16=Quit
     if (fileMenuOpen) {
         float dropX = fileX - 5, dropW = 240;
-        bool isSep[] = {false,false,false,false,false,false,true,false,false,true,false,false,true,false};
-        int total = 14;
+        bool isSep[] = {false,false,false,false,false,false,true,false,false,true,false,false,true,false,false,true,false};
+        int total = 17;
         float iy = menuBarHeight;
 
         if (x >= dropX && x <= dropX + dropW) {
@@ -1234,10 +1238,26 @@ bool ofApp::handleMenuClick(int x, int y) {
                         case 3: saveProject(true); break;
                         case 4: saveToCloud(); break;
                         case 5: loadFromCloud(); break;
-                        case 7: // Autosave toggle
+                        case 7: { // Export Layout
+                            ofFileDialogResult res = ofSystemSaveDialog("layout.vstpreset", "Export Layout Preset");
+                            if (res.bSuccess) {
+                                scene.exportPreset(res.getPath());
+                                ofLogNotice("ofApp") << "Layout exported";
+                            }
+                            break;
+                        }
+                        case 8: { // Import Layout
+                            ofFileDialogResult res = ofSystemLoadDialog("Import Layout Preset", false);
+                            if (res.bSuccess) {
+                                pushUndo();
+                                scene.importPreset(res.getPath());
+                                updatePropertiesForSelection();
+                                ofLogNotice("ofApp") << "Layout imported";
+                            }
+                            break;
+                        }
+                        case 10: // Autosave toggle
                             if (!autosaveEnabled && currentProjectPath.empty() && currentCloudProjectName.empty()) {
-                                // No save destination yet — ask user via text box
-                                // Enter a name → cloud; cancel → local save dialog
                                 std::string cloudName = ofSystemTextBoxDialog(
                                     "Enter a name to save to Cloud (free)\nor cancel for local save:", "");
                                 if (!cloudName.empty()) {
@@ -1251,16 +1271,16 @@ bool ofApp::handleMenuClick(int x, int y) {
                             autosaveEnabled = !autosaveEnabled;
                             autosaveTimer = 0;
                             break;
-                        case 8: // Preferences
+                        case 11: // Preferences
                             settingsModal.show(&preferences);
                             break;
-                        case 10: break; // User email — display only, no action
-                        case 11: // Log Out
+                        case 13: break; // User email — display only, no action
+                        case 14: // Log Out
                             authManager.logout();
                             authModal.show();
                             cam.disableMouseInput();
                             break;
-                        case 13: ofExit(); break;
+                        case 16: ofExit(); break;
                     }
                     return true;
                 }

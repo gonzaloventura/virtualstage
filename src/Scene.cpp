@@ -503,6 +503,94 @@ bool Scene::loadProject(const std::string& path, ofJson* outCameraJson) {
     return true;
 }
 
+bool Scene::exportPreset(const std::string& path) const {
+    ofJson root;
+    root["type"] = "vstpreset";
+    root["version"] = 1;
+
+    ofJson groupsArr = ofJson::array();
+    for (const auto& g : groups) {
+        ofJson gj;
+        gj["id"] = g.id;
+        gj["name"] = g.name;
+        // No source info in presets
+
+        ofJson slicesArr = ofJson::array();
+        for (const auto& screen : screens) {
+            if (screen->groupId == g.id) {
+                ofJson sj = screen->toJson();
+                // Strip source info
+                sj.erase("sourceName");
+                sj.erase("sourceIndex");
+                slicesArr.push_back(sj);
+            }
+        }
+        gj["slices"] = slicesArr;
+        groupsArr.push_back(gj);
+    }
+    root["groups"] = groupsArr;
+
+    if (!stageElements.empty()) {
+        ofJson elemArr = ofJson::array();
+        for (const auto& e : stageElements) {
+            elemArr.push_back(e->toJson());
+        }
+        root["stageElements"] = elemArr;
+    }
+
+    return ofSavePrettyJson(path, root);
+}
+
+bool Scene::importPreset(const std::string& path) {
+    ofJson root = ofLoadJson(path);
+    if (root.is_null() || root.value("type", "") != "vstpreset") {
+        ofLogError("Scene") << "Not a valid preset file: " << path;
+        return false;
+    }
+
+    // Clear existing state
+    screens.clear();
+    groups.clear();
+    stageElements.clear();
+    selectedStageElement = -1;
+    clearSelection();
+    nextScreenId = 1;
+    nextGroupId = 1;
+
+    if (root.contains("groups")) {
+        for (auto& gj : root["groups"]) {
+            ScreenGroup g;
+            g.id = gj.value("id", nextGroupId);
+            g.name = gj.value("name", "Screen " + ofToString(g.id));
+            if (g.id >= nextGroupId) nextGroupId = g.id + 1;
+
+            if (gj.contains("slices")) {
+                for (auto& sj : gj["slices"]) {
+                    auto screen = std::make_unique<ScreenObject>();
+                    screen->fromJson(sj);
+                    screen->groupId = g.id;
+                    screen->disconnectSource();
+                    screens.push_back(std::move(screen));
+                    nextScreenId++;
+                }
+            }
+            groups.push_back(g);
+        }
+    }
+
+    if (root.contains("stageElements") && root["stageElements"].is_array()) {
+        for (auto& ej : root["stageElements"]) {
+            auto elem = std::make_unique<StageElement>();
+            elem->fromJson(ej);
+            stageElements.push_back(std::move(elem));
+        }
+    }
+
+    ofLogNotice("Scene") << "Imported preset: " << groups.size() << " screens, "
+                         << screens.size() << " slices from " << path;
+    return true;
+}
+
 void Scene::reconnectSources() {
 #ifdef TARGET_OSX
     const auto& serverList = directory.getServerList();

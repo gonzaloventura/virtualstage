@@ -79,6 +79,10 @@ public:
     bool saveProject(const std::string& path, const ofJson& cameraJson = ofJson()) const;
     bool loadProject(const std::string& path, ofJson* outCameraJson = nullptr);
 
+    // Layout preset export/import (positions only, no sources)
+    bool exportPreset(const std::string& path) const;
+    bool importPreset(const std::string& path);
+
     // Reconnect all screens to their sources by name (used after undo/redo/load)
     void reconnectSources();
 
