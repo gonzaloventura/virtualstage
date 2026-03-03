@@ -69,6 +69,10 @@ private:
     // Background brightness (driven by ambient light slider, default=lightest)
     int bgBrightness = 60;
 
+    // Background image (loaded from preferences)
+    ofImage bgImage;
+    std::string bgImageLoadedPath; // track loaded path to avoid reloading
+
     // View menu toggle states
     bool showAmbientLight = false;
     bool showPosition = true;

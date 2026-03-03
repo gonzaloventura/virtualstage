@@ -21,4 +21,5 @@ private:
     bool visible = false;
     Preferences* prefs = nullptr;
     int selectedUnitIndex = 0; // 0=Meters, 1=Centimeters, 2=Feet, 3=Inches
+    int selectedBgMode = 0;    // 0=Solid, 1=Gradient, 2=Image
 };

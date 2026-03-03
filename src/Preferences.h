@@ -4,6 +4,7 @@
 #include <mutex>
 
 enum class MeasurementUnit { Meters, Centimeters, Feet, Inches };
+enum class BackgroundMode { Solid, Gradient, Image };
 
 class Preferences {
 public:
@@ -30,12 +31,33 @@ public:
     // Convert display value to OGL dimension
     float displayToOgl(float displayValue) const;
 
+    // Background settings
+    BackgroundMode getBgMode() const;
+    void setBgMode(BackgroundMode m);
+
+    ofColor getBgColor() const;
+    void setBgColor(const ofColor& c);
+
+    ofColor getBgGradientTop() const;
+    void setBgGradientTop(const ofColor& c);
+
+    ofColor getBgGradientBottom() const;
+    void setBgGradientBottom(const ofColor& c);
+
+    std::string getBgImagePath() const;
+    void setBgImagePath(const std::string& path);
+
     // Serialize to/from JSON string (for cloud sync)
     std::string toJsonString() const;
     void fromJsonString(const std::string& jsonStr);
 
 private:
     MeasurementUnit unit = MeasurementUnit::Meters;
+    BackgroundMode bgMode = BackgroundMode::Solid;
+    ofColor bgColor{40, 40, 40};
+    ofColor bgGradientTop{60, 60, 80};
+    ofColor bgGradientBottom{20, 20, 20};
+    std::string bgImagePath;
     mutable std::mutex mtx;
 
     std::string getPrefsDir() const;   // ~/.virtualstage/

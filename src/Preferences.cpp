@@ -36,6 +36,30 @@ static MeasurementUnit stringToUnit(const std::string& s) {
     return MeasurementUnit::Meters;
 }
 
+static std::string bgModeToString(BackgroundMode m) {
+    switch (m) {
+        case BackgroundMode::Solid:    return "solid";
+        case BackgroundMode::Gradient: return "gradient";
+        case BackgroundMode::Image:    return "image";
+    }
+    return "solid";
+}
+
+static BackgroundMode stringToBgMode(const std::string& s) {
+    if (s == "gradient") return BackgroundMode::Gradient;
+    if (s == "image")    return BackgroundMode::Image;
+    return BackgroundMode::Solid;
+}
+
+static ofJson colorToJson(const ofColor& c) {
+    return {{"r", c.r}, {"g", c.g}, {"b", c.b}};
+}
+
+static ofColor jsonToColor(const ofJson& j, const ofColor& def) {
+    if (!j.is_object()) return def;
+    return ofColor(j.value("r", (int)def.r), j.value("g", (int)def.g), j.value("b", (int)def.b));
+}
+
 // ── Local I/O ───────────────────────────────────────────────────────────────
 
 void Preferences::loadLocal() {
@@ -46,6 +70,15 @@ void Preferences::loadLocal() {
         ofJson j = ofJson::parse(f);
         if (j.contains("measurementUnit") && j["measurementUnit"].is_string()) {
             unit = stringToUnit(j["measurementUnit"].get<std::string>());
+        }
+        if (j.contains("bgMode") && j["bgMode"].is_string()) {
+            bgMode = stringToBgMode(j["bgMode"].get<std::string>());
+        }
+        if (j.contains("bgColor")) bgColor = jsonToColor(j["bgColor"], bgColor);
+        if (j.contains("bgGradientTop")) bgGradientTop = jsonToColor(j["bgGradientTop"], bgGradientTop);
+        if (j.contains("bgGradientBottom")) bgGradientBottom = jsonToColor(j["bgGradientBottom"], bgGradientBottom);
+        if (j.contains("bgImagePath") && j["bgImagePath"].is_string()) {
+            bgImagePath = j["bgImagePath"].get<std::string>();
         }
     } catch (...) {}
 }
@@ -62,6 +95,11 @@ void Preferences::saveLocal() {
 
     ofJson j;
     j["measurementUnit"] = unitToString(unit);
+    j["bgMode"] = bgModeToString(bgMode);
+    j["bgColor"] = colorToJson(bgColor);
+    j["bgGradientTop"] = colorToJson(bgGradientTop);
+    j["bgGradientBottom"] = colorToJson(bgGradientBottom);
+    if (!bgImagePath.empty()) j["bgImagePath"] = bgImagePath;
 
     std::ofstream f(getPrefsPath());
     if (f.is_open()) {
@@ -92,6 +130,58 @@ std::string Preferences::getUnitSuffix() const {
     return "m";
 }
 
+// ── Background getters / setters ────────────────────────────────────────────
+
+BackgroundMode Preferences::getBgMode() const {
+    std::lock_guard<std::mutex> lock(mtx);
+    return bgMode;
+}
+
+void Preferences::setBgMode(BackgroundMode m) {
+    std::lock_guard<std::mutex> lock(mtx);
+    bgMode = m;
+}
+
+ofColor Preferences::getBgColor() const {
+    std::lock_guard<std::mutex> lock(mtx);
+    return bgColor;
+}
+
+void Preferences::setBgColor(const ofColor& c) {
+    std::lock_guard<std::mutex> lock(mtx);
+    bgColor = c;
+}
+
+ofColor Preferences::getBgGradientTop() const {
+    std::lock_guard<std::mutex> lock(mtx);
+    return bgGradientTop;
+}
+
+void Preferences::setBgGradientTop(const ofColor& c) {
+    std::lock_guard<std::mutex> lock(mtx);
+    bgGradientTop = c;
+}
+
+ofColor Preferences::getBgGradientBottom() const {
+    std::lock_guard<std::mutex> lock(mtx);
+    return bgGradientBottom;
+}
+
+void Preferences::setBgGradientBottom(const ofColor& c) {
+    std::lock_guard<std::mutex> lock(mtx);
+    bgGradientBottom = c;
+}
+
+std::string Preferences::getBgImagePath() const {
+    std::lock_guard<std::mutex> lock(mtx);
+    return bgImagePath;
+}
+
+void Preferences::setBgImagePath(const std::string& path) {
+    std::lock_guard<std::mutex> lock(mtx);
+    bgImagePath = path;
+}
+
 // ── Conversion ──────────────────────────────────────────────────────────────
 // Base mapping: 1 OGL unit = 1 cm → 100 OGL = 1 m
 
@@ -120,6 +210,11 @@ std::string Preferences::toJsonString() const {
     std::lock_guard<std::mutex> lock(mtx);
     ofJson j;
     j["measurementUnit"] = unitToString(unit);
+    j["bgMode"] = bgModeToString(bgMode);
+    j["bgColor"] = colorToJson(bgColor);
+    j["bgGradientTop"] = colorToJson(bgGradientTop);
+    j["bgGradientBottom"] = colorToJson(bgGradientBottom);
+    if (!bgImagePath.empty()) j["bgImagePath"] = bgImagePath;
     return j.dump();
 }
 
@@ -129,6 +224,15 @@ void Preferences::fromJsonString(const std::string& jsonStr) {
         ofJson j = ofJson::parse(jsonStr);
         if (j.contains("measurementUnit") && j["measurementUnit"].is_string()) {
             unit = stringToUnit(j["measurementUnit"].get<std::string>());
+        }
+        if (j.contains("bgMode") && j["bgMode"].is_string()) {
+            bgMode = stringToBgMode(j["bgMode"].get<std::string>());
+        }
+        if (j.contains("bgColor")) bgColor = jsonToColor(j["bgColor"], bgColor);
+        if (j.contains("bgGradientTop")) bgGradientTop = jsonToColor(j["bgGradientTop"], bgGradientTop);
+        if (j.contains("bgGradientBottom")) bgGradientBottom = jsonToColor(j["bgGradientBottom"], bgGradientBottom);
+        if (j.contains("bgImagePath") && j["bgImagePath"].is_string()) {
+            bgImagePath = j["bgImagePath"].get<std::string>();
         }
     } catch (...) {}
 }

@@ -212,7 +212,27 @@ void ofApp::update() {
 }
 
 void ofApp::draw() {
-    ofBackground(bgBrightness);
+    // Draw background based on preferences
+    BackgroundMode bgm = preferences.getBgMode();
+    if (bgm == BackgroundMode::Gradient) {
+        ofColor top = preferences.getBgGradientTop();
+        ofColor bot = preferences.getBgGradientBottom();
+        ofBackgroundGradient(top, bot, OF_GRADIENT_LINEAR);
+    } else if (bgm == BackgroundMode::Image) {
+        std::string imgPath = preferences.getBgImagePath();
+        if (!imgPath.empty() && imgPath != bgImageLoadedPath) {
+            bgImage.load(imgPath);
+            bgImageLoadedPath = imgPath;
+        }
+        ofBackground(0);
+        if (bgImage.isAllocated()) {
+            ofSetColor(255);
+            bgImage.draw(0, 0, ofGetWidth(), ofGetHeight());
+        }
+    } else {
+        ofColor solidColor = preferences.getBgColor();
+        ofBackground(solidColor);
+    }
 
     // --- Mapping mode: full-screen 2D editor ---
     if (mappingMode) {
