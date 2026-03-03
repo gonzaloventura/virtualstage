@@ -30,6 +30,15 @@ public:
     bool snapEnabled = false;
     float snapSize = 50.0f;
 
+    // Snap to edges
+    bool edgeSnapEnabled = true;
+    float edgeSnapThreshold = 15.0f; // world units
+    // Set all screens for edge-snap reference (call before drag)
+    void setEdgeSnapScreens(const std::vector<std::unique_ptr<ScreenObject>>* allScreens);
+    // Active snap lines for visual feedback (populated during updateDrag)
+    struct SnapLine { glm::vec3 a, b; };
+    std::vector<SnapLine> activeSnapLines;
+
     std::string getModeString() const;
 
 private:
@@ -38,6 +47,8 @@ private:
     ofColor getAxisColor(Axis axis, bool active) const;
     float hitTestRing(const ofCamera& cam, const glm::vec2& screenPos,
                       const glm::vec3& center, Axis axis, float radius) const;
+
+    const std::vector<std::unique_ptr<ScreenObject>>* edgeSnapScreens = nullptr;
 
     Axis activeAxis = Axis::None;
     bool dragging = false;

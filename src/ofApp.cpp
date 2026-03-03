@@ -230,6 +230,18 @@ void ofApp::draw() {
     if (appMode == AppMode::Designer && scene.getPrimarySelected() >= 0 && scene.getScreen(scene.getPrimarySelected())) {
         ofDisableDepthTest();
         gizmo.draw(*scene.getScreen(scene.getPrimarySelected()), cam);
+
+        // Draw edge snap guide lines
+        if (gizmo.isDragging() && !gizmo.activeSnapLines.empty()) {
+            ofPushStyle();
+            ofSetColor(0, 200, 255, 180);
+            ofSetLineWidth(1);
+            for (auto& sl : gizmo.activeSnapLines) {
+                ofDrawLine(sl.a, sl.b);
+            }
+            ofPopStyle();
+        }
+
         ofEnableDepthTest();
     }
 
@@ -2673,6 +2685,7 @@ void ofApp::mousePressed(int x, int y, int button) {
                 if (s) targets.push_back(s);
             }
             gizmo.mirrorYaw = propertiesPanel.isMirrorYaw();
+            gizmo.setEdgeSnapScreens(&scene.screens);
             gizmo.beginDrag(glm::vec2(x, y), cam, *primary, targets);
             return;
         }

@@ -201,6 +201,8 @@ void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam) {
         float worldScale = getGizmoSize(pos, cam) / 80.0f;
         glm::vec3 worldDelta = dir * projectedDelta * worldScale;
 
+        activeSnapLines.clear();
+
         for (auto& state : dragTargets) {
             glm::vec3 newPos = state.startPos + worldDelta;
             if (snapEnabled) {
@@ -208,6 +210,86 @@ void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam) {
                 newPos.y = std::round(newPos.y / snapSize) * snapSize;
                 newPos.z = std::round(newPos.z / snapSize) * snapSize;
             }
+
+            // Edge snap: compare dragged screen edges with other screens
+            if (edgeSnapEnabled && edgeSnapScreens) {
+                float hw = state.target->getPlaneWidth() * state.target->getScale().x * 0.5f;
+                float hh = state.target->getPlaneHeight() * state.target->getScale().y * 0.5f;
+
+                // Edges of the dragged screen (axis-aligned approximation)
+                float myLeft   = newPos.x - hw;
+                float myRight  = newPos.x + hw;
+                float myTop    = newPos.y + hh;
+                float myBottom = newPos.y - hh;
+
+                for (auto& other : *edgeSnapScreens) {
+                    if (other.get() == state.target) continue;
+                    // Skip screens that are also being dragged
+                    bool isDragTarget = false;
+                    for (auto& dt : dragTargets) {
+                        if (dt.target == other.get()) { isDragTarget = true; break; }
+                    }
+                    if (isDragTarget) continue;
+
+                    glm::vec3 oPos = other->getPosition();
+                    float oHW = other->getPlaneWidth() * other->getScale().x * 0.5f;
+                    float oHH = other->getPlaneHeight() * other->getScale().y * 0.5f;
+
+                    float oLeft   = oPos.x - oHW;
+                    float oRight  = oPos.x + oHW;
+                    float oTop    = oPos.y + oHH;
+                    float oBottom = oPos.y - oHH;
+
+                    // X-axis edge snapping
+                    float xEdges[] = { oLeft, oRight, oPos.x };
+                    for (float ox : xEdges) {
+                        if (std::abs(myLeft - ox) < edgeSnapThreshold) {
+                            newPos.x = ox + hw;
+                            activeSnapLines.push_back({
+                                glm::vec3(ox, std::min(myBottom, oBottom) - 50, newPos.z),
+                                glm::vec3(ox, std::max(myTop, oTop) + 50, newPos.z)
+                            });
+                        } else if (std::abs(myRight - ox) < edgeSnapThreshold) {
+                            newPos.x = ox - hw;
+                            activeSnapLines.push_back({
+                                glm::vec3(ox, std::min(myBottom, oBottom) - 50, newPos.z),
+                                glm::vec3(ox, std::max(myTop, oTop) + 50, newPos.z)
+                            });
+                        } else if (std::abs(newPos.x - ox) < edgeSnapThreshold) {
+                            newPos.x = ox;
+                            activeSnapLines.push_back({
+                                glm::vec3(ox, std::min(myBottom, oBottom) - 50, newPos.z),
+                                glm::vec3(ox, std::max(myTop, oTop) + 50, newPos.z)
+                            });
+                        }
+                    }
+
+                    // Y-axis edge snapping
+                    float yEdges[] = { oTop, oBottom, oPos.y };
+                    for (float oy : yEdges) {
+                        if (std::abs(myTop - oy) < edgeSnapThreshold) {
+                            newPos.y = oy - hh;
+                            activeSnapLines.push_back({
+                                glm::vec3(std::min(myLeft, oLeft) - 50, oy, newPos.z),
+                                glm::vec3(std::max(myRight, oRight) + 50, oy, newPos.z)
+                            });
+                        } else if (std::abs(myBottom - oy) < edgeSnapThreshold) {
+                            newPos.y = oy + hh;
+                            activeSnapLines.push_back({
+                                glm::vec3(std::min(myLeft, oLeft) - 50, oy, newPos.z),
+                                glm::vec3(std::max(myRight, oRight) + 50, oy, newPos.z)
+                            });
+                        } else if (std::abs(newPos.y - oy) < edgeSnapThreshold) {
+                            newPos.y = oy;
+                            activeSnapLines.push_back({
+                                glm::vec3(std::min(myLeft, oLeft) - 50, oy, newPos.z),
+                                glm::vec3(std::max(myRight, oRight) + 50, oy, newPos.z)
+                            });
+                        }
+                    }
+                }
+            }
+
             state.target->setPosition(newPos);
         }
 
@@ -265,6 +347,11 @@ void Gizmo::endDrag() {
     dragging = false;
     activeAxis = Axis::None;
     dragTargets.clear();
+    activeSnapLines.clear();
+}
+
+void Gizmo::setEdgeSnapScreens(const std::vector<std::unique_ptr<ScreenObject>>* allScreens) {
+    edgeSnapScreens = allScreens;
 }
 
 std::string Gizmo::getModeString() const {
