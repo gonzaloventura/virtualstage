@@ -55,6 +55,11 @@ void Scene::draw(bool viewMode) {
         }
     }
 
+    // Draw stage elements
+    for (int i = 0; i < (int)stageElements.size(); i++) {
+        stageElements[i]->draw(i == selectedStageElement);
+    }
+
     light.disable();
     ofDisableLighting();
 }
@@ -353,6 +358,33 @@ void Scene::pollSpoutSenders() {
 }
 #endif
 
+// --- Stage Element Management ---
+
+int Scene::addStageElement(StageElementType type, const std::string& name) {
+    auto elem = std::make_unique<StageElement>(type, name);
+    stageElements.push_back(std::move(elem));
+    return (int)stageElements.size() - 1;
+}
+
+void Scene::removeStageElement(int index) {
+    if (index >= 0 && index < (int)stageElements.size()) {
+        stageElements.erase(stageElements.begin() + index);
+        if (selectedStageElement == index) selectedStageElement = -1;
+        else if (selectedStageElement > index) selectedStageElement--;
+    }
+}
+
+StageElement* Scene::getStageElement(int index) {
+    if (index >= 0 && index < (int)stageElements.size()) {
+        return stageElements[index].get();
+    }
+    return nullptr;
+}
+
+int Scene::getStageElementCount() const {
+    return (int)stageElements.size();
+}
+
 // --- Project Save/Load ---
 
 bool Scene::saveProject(const std::string& path, const ofJson& cameraJson) const {
@@ -384,6 +416,15 @@ bool Scene::saveProject(const std::string& path, const ofJson& cameraJson) const
     }
     root["groups"] = groupsArr;
 
+    // Serialize stage elements
+    if (!stageElements.empty()) {
+        ofJson elemArr = ofJson::array();
+        for (const auto& e : stageElements) {
+            elemArr.push_back(e->toJson());
+        }
+        root["stageElements"] = elemArr;
+    }
+
     return ofSavePrettyJson(path, root);
 }
 
@@ -397,6 +438,8 @@ bool Scene::loadProject(const std::string& path, ofJson* outCameraJson) {
     // Clear existing state
     screens.clear();
     groups.clear();
+    stageElements.clear();
+    selectedStageElement = -1;
     clearSelection();
     nextScreenId = 1;
     nextGroupId = 1;
@@ -443,10 +486,20 @@ bool Scene::loadProject(const std::string& path, ofJson* outCameraJson) {
         return false;
     }
 
+    // Load stage elements if present
+    if (root.contains("stageElements") && root["stageElements"].is_array()) {
+        for (auto& ej : root["stageElements"]) {
+            auto elem = std::make_unique<StageElement>();
+            elem->fromJson(ej);
+            stageElements.push_back(std::move(elem));
+        }
+    }
+
     reconnectSources();
 
     ofLogNotice("Scene") << "Loaded project: " << groups.size() << " screens, "
-                         << screens.size() << " slices from " << path;
+                         << screens.size() << " slices, "
+                         << stageElements.size() << " stage elements from " << path;
     return true;
 }
 

@@ -1,6 +1,7 @@
 #include "win_byte_fix.h"
 #include "UndoManager.h"
 #include "Scene.h"
+#include "StageElement.h"
 
 SceneSnapshot UndoManager::captureState(Scene& scene) {
     SceneSnapshot snap;
@@ -9,8 +10,17 @@ SceneSnapshot UndoManager::captureState(Scene& scene) {
         sd.json = screen->toJson();
         snap.screens.push_back(sd);
     }
+    for (auto& g : scene.groups) {
+        snap.groups.push_back({g.id, g.name, g.sourceIndex, g.sourceName});
+    }
+    for (auto& e : scene.stageElements) {
+        SceneSnapshot::ElementData ed;
+        ed.json = e->toJson();
+        snap.elements.push_back(ed);
+    }
     snap.selectedIndices = scene.selectedIndices;
     snap.primarySelected = scene.primarySelected;
+    snap.selectedStageElement = scene.selectedStageElement;
     return snap;
 }
 
@@ -20,6 +30,7 @@ void UndoManager::restoreState(Scene& scene, const SceneSnapshot& snapshot) {
         screen->disconnectSource();
     }
     scene.screens.clear();
+    scene.groups.clear();
 
     // Rebuild screens from snapshot
     for (auto& sd : snapshot.screens) {
@@ -27,6 +38,28 @@ void UndoManager::restoreState(Scene& scene, const SceneSnapshot& snapshot) {
         screen->fromJson(sd.json);
         scene.screens.push_back(std::move(screen));
     }
+
+    // Rebuild groups from snapshot
+    int maxGroupId = 0;
+    for (auto& gd : snapshot.groups) {
+        ScreenGroup g;
+        g.id = gd.id;
+        g.name = gd.name;
+        g.sourceIndex = gd.sourceIndex;
+        g.sourceName = gd.sourceName;
+        scene.groups.push_back(g);
+        if (g.id > maxGroupId) maxGroupId = g.id;
+    }
+    scene.nextGroupId = maxGroupId + 1;
+
+    // Rebuild stage elements from snapshot
+    scene.stageElements.clear();
+    for (auto& ed : snapshot.elements) {
+        auto elem = std::make_unique<StageElement>();
+        elem->fromJson(ed.json);
+        scene.stageElements.push_back(std::move(elem));
+    }
+    scene.selectedStageElement = snapshot.selectedStageElement;
 
     // Restore selection
     scene.selectedIndices = snapshot.selectedIndices;

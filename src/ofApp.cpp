@@ -354,6 +354,8 @@ void ofApp::drawServerList() {
         }
     }
     if (scene.groups.empty()) contentH += rowH;
+    contentH += 48; // gap (12) + separator + gap (8) + STAGE header (28)
+    contentH += std::max(scene.getStageElementCount(), 1) * rowH;
     contentH += 48; // gap (20) + separator line + gap (8) + SERVERS header (28)
     contentH += std::max((int)servers.size(), 1) * rowH;
     contentH += 10; // bottom padding
@@ -479,6 +481,61 @@ void ofApp::drawServerList() {
     if (scene.groups.empty()) {
         ofSetColor(100);
         ofDrawBitmapString("No screens", panelX + 10, curY + 15);
+        curY += rowH;
+    }
+
+    // --- STAGE section ---
+    curY += 12;
+    ofSetColor(60);
+    ofDrawLine(panelX + 10, curY, panelX + serverListWidth - 10, curY);
+    curY += 8;
+    ofSetColor(200);
+    ofDrawBitmapString("STAGE", panelX + 10, curY + 18);
+    curY += 28;
+
+    for (int ei = 0; ei < scene.getStageElementCount(); ei++) {
+        auto* elem = scene.getStageElement(ei);
+        if (!elem) continue;
+
+        float elemTop = curY;
+        bool elemSelected = (scene.selectedStageElement == ei);
+        bool elemHovered = (mouseX >= panelX && mouseX < serverListWidth &&
+                            mouseY >= elemTop && mouseY < elemTop + rowH &&
+                            mouseY >= panelY && mouseY < panelY + panelH);
+
+        if (elemSelected) {
+            ofSetColor(0, 180, 100, 60);
+            ofDrawRectangle(panelX, elemTop, serverListWidth, rowH);
+        } else if (elemHovered) {
+            ofSetColor(255, 255, 255, 20);
+            ofDrawRectangle(panelX, elemTop, serverListWidth, rowH);
+        }
+
+        ofSetColor(elemSelected ? ofColor(0, 200, 150) : ofColor(160));
+        std::string eLabel = elem->name;
+        int maxCharsE = (int)((serverListWidth - 50) / 8);
+        if ((int)eLabel.length() > maxCharsE) eLabel = eLabel.substr(0, maxCharsE - 3) + "...";
+        ofDrawBitmapString(eLabel, panelX + 10, elemTop + 15);
+
+        // Delete [X]
+        float exBtnX = serverListWidth - xBtnSize - 8;
+        float exBtnY = elemTop + (rowH - xBtnSize) / 2;
+        bool exHovered = (mouseX >= exBtnX && mouseX <= exBtnX + xBtnSize &&
+                          mouseY >= exBtnY && mouseY <= exBtnY + xBtnSize &&
+                          mouseY >= panelY && mouseY < panelY + panelH);
+        ofSetColor(exHovered ? ofColor(255, 80, 80) : ofColor(80));
+        ofNoFill();
+        ofDrawRectangle(exBtnX, exBtnY, xBtnSize, xBtnSize);
+        ofFill();
+        ofDrawLine(exBtnX + 4, exBtnY + 4, exBtnX + xBtnSize - 4, exBtnY + xBtnSize - 4);
+        ofDrawLine(exBtnX + xBtnSize - 4, exBtnY + 4, exBtnX + 4, exBtnY + xBtnSize - 4);
+
+        curY += rowH;
+    }
+
+    if (scene.getStageElementCount() == 0) {
+        ofSetColor(100);
+        ofDrawBitmapString("No elements", panelX + 10, curY + 15);
         curY += rowH;
     }
 
@@ -710,6 +767,34 @@ bool ofApp::handleSidebarClick(int x, int y) {
     }
 
     if (scene.groups.empty()) curY += rowH;
+
+    // --- STAGE section ---
+    curY += 12 + 8 + 28; // gap + separator + STAGE header
+
+    for (int ei = 0; ei < scene.getStageElementCount(); ei++) {
+        float elemTop = curY;
+        if (y >= elemTop && y < elemTop + rowH) {
+            // Delete [X] button
+            float xBtnX2 = serverListWidth - xBtnSize - 8;
+            float xBtnY2 = elemTop + (rowH - xBtnSize) / 2;
+            if (x >= xBtnX2 && x <= xBtnX2 + xBtnSize &&
+                y >= xBtnY2 && y <= xBtnY2 + xBtnSize) {
+                pushUndo();
+                scene.removeStageElement(ei);
+                return true;
+            }
+
+            // Select stage element
+            scene.clearSelection();
+            selectedGroupId = -1;
+            scene.selectedStageElement = ei;
+            propertiesPanel.setTarget(nullptr);
+            return true;
+        }
+        curY += rowH;
+    }
+
+    if (scene.getStageElementCount() == 0) curY += rowH;
 
     // Gap + separator + SERVERS header
     curY += 20 + 8 + 28;
@@ -1916,6 +2001,33 @@ void ofApp::keyPressed(int key) {
             return;
         case OF_KEY_F10:
             takeScreenshot();
+            return;
+        case OF_KEY_F5:
+            if (appMode == AppMode::Designer) {
+                pushUndo();
+                int fi = scene.addStageElement(StageElementType::Floor);
+                scene.selectedStageElement = fi;
+                scene.clearSelection();
+                selectedGroupId = -1;
+            }
+            return;
+        case OF_KEY_F6:
+            if (appMode == AppMode::Designer) {
+                pushUndo();
+                int ti = scene.addStageElement(StageElementType::Truss);
+                scene.selectedStageElement = ti;
+                scene.clearSelection();
+                selectedGroupId = -1;
+            }
+            return;
+        case OF_KEY_F7:
+            if (appMode == AppMode::Designer) {
+                pushUndo();
+                int bi = scene.addStageElement(StageElementType::Box);
+                scene.selectedStageElement = bi;
+                scene.clearSelection();
+                selectedGroupId = -1;
+            }
             return;
     }
 

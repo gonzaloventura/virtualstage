@@ -1,6 +1,7 @@
 #pragma once
 #include "ofMain.h"
 #include "ScreenObject.h"
+#include "StageElement.h"
 #include <vector>
 #include <set>
 #include <memory>
@@ -12,6 +13,14 @@
 #include "ofxSpout.h"
 #include "SpoutReceiver.h"
 #endif
+
+struct ScreenGroup {
+    int id = 0;
+    std::string name;
+    int sourceIndex = -1;
+    std::string sourceName;
+    bool collapsed = false;
+};
 
 struct ServerInfo {
     std::string serverName;
@@ -51,6 +60,18 @@ public:
     // Assign source to a screen by server index
     void assignSourceToScreen(int screenIndex, int serverIndex);
 
+    // Screen groups (hierarchy)
+    std::vector<ScreenGroup> groups;
+
+    int addGroup(const std::string& name = "");
+    void removeGroup(int groupId);
+    ScreenGroup* getGroup(int groupId);
+    int getGroupCount() const;
+    std::vector<int> getSliceIndicesForGroup(int groupId) const;
+    int addSliceToGroup(int groupId, const std::string& name = "");
+    void assignSourceToGroup(int groupId, int serverIndex);
+    void disconnectGroup(int groupId);
+
     // Update (for Spout receiver polling)
     void update();
 
@@ -79,10 +100,19 @@ public:
     std::function<void()> onServerListChanged;
 
     std::vector<std::unique_ptr<ScreenObject>> screens;
+    int nextScreenId = 1;
+    int nextGroupId = 1;
+
+    // Stage elements (floor, truss, box)
+    std::vector<std::unique_ptr<StageElement>> stageElements;
+    int addStageElement(StageElementType type, const std::string& name = "");
+    void removeStageElement(int index);
+    StageElement* getStageElement(int index);
+    int getStageElementCount() const;
+    int selectedStageElement = -1;
 
 private:
     ofLight light;
-    int nextScreenId = 1;
 
 #ifdef TARGET_OSX
     ofxSyphonServerDirectory directory;
