@@ -25,7 +25,10 @@ void ofApp::setup() {
 
     // Scene (sets up shared server directory)
     scene.setup();
-    scene.addScreen("Screen 1");
+    {
+        int gid = scene.addGroup("Screen 1");
+        scene.addSliceToGroup(gid, "Slice 1");
+    }
     scene.onServerListChanged = [this]() { refreshServerList(); };
 
     // Properties panel (right side)
@@ -307,7 +310,13 @@ void ofApp::drawServerList() {
     // Calculate total content height for scroll
     float contentH = 0;
     contentH += 28; // SCREENS header
-    contentH += std::max(scene.getScreenCount(), 1) * rowH;
+    for (auto& g : scene.groups) {
+        contentH += rowH; // group header
+        if (!g.collapsed) {
+            contentH += scene.getSliceIndicesForGroup(g.id).size() * rowH;
+        }
+    }
+    if (scene.groups.empty()) contentH += rowH;
     contentH += 48; // gap (20) + separator line + gap (8) + SERVERS header (28)
     contentH += std::max((int)servers.size(), 1) * rowH;
     contentH += 10; // bottom padding
@@ -326,62 +335,111 @@ void ofApp::drawServerList() {
 
     // --- SCREENS header ---
     ofSetColor(200);
-    ofDrawBitmapString("SCREENS  [A]dd", panelX + 10, curY + 18);
+    ofDrawBitmapString("SCREENS", panelX + 10, curY + 18);
     curY += 28;
 
-    // --- Screen rows ---
+    // --- Group + Slice rows ---
     float mouseX = ofGetMouseX();
     float mouseY = ofGetMouseY();
 
-    for (int i = 0; i < scene.getScreenCount(); i++) {
-        auto* screen = scene.getScreen(i);
-        if (!screen) continue;
-
+    for (auto& group : scene.groups) {
         float rowTop = curY;
-        float rowBot = curY + rowH;
-        bool selected = scene.isSelected(i);
+
+        // Determine if any slice in this group is selected
+        auto sliceIndices = scene.getSliceIndicesForGroup(group.id);
+        bool groupHasSelection = false;
+        for (int si : sliceIndices) {
+            if (scene.isSelected(si)) { groupHasSelection = true; break; }
+        }
+        bool isSelectedGroup = (selectedGroupId == group.id);
+
         bool hovered = (mouseX >= panelX && mouseX < serverListWidth &&
-                        mouseY >= rowTop && mouseY < rowBot &&
+                        mouseY >= rowTop && mouseY < rowTop + rowH &&
                         mouseY >= panelY && mouseY < panelY + panelH);
 
-        // Row background on hover/selected
-        if (selected) {
-            ofSetColor(0, 120, 200, 60);
+        // Group header background
+        if (isSelectedGroup || groupHasSelection) {
+            ofSetColor(0, 120, 200, 40);
             ofDrawRectangle(panelX, rowTop, serverListWidth, rowH);
         } else if (hovered) {
             ofSetColor(255, 255, 255, 20);
             ofDrawRectangle(panelX, rowTop, serverListWidth, rowH);
         }
 
-        // Screen name
-        ofSetColor(selected ? ofColor(0, 200, 255) : ofColor(180));
-        std::string label = screen->name;
-        if (screen->hasSource()) {
-            label += " [" + screen->sourceName + "]";
-        }
-        int maxChars = (int)((serverListWidth - 40) / 8); // 8px per char, leave room for X
-        if ((int)label.length() > maxChars) label = label.substr(0, maxChars - 3) + "...";
-        ofDrawBitmapString(label, panelX + 10, rowTop + 15);
+        // Collapse arrow
+        ofSetColor(150);
+        ofDrawBitmapString(group.collapsed ? ">" : "v", panelX + 6, rowTop + 15);
 
-        // Delete [X] button
+        // Group name + source
+        ofSetColor(isSelectedGroup ? ofColor(0, 200, 255) : ofColor(220));
+        std::string gLabel = group.name;
+        if (!group.sourceName.empty()) {
+            gLabel += " [" + group.sourceName + "]";
+        }
+        int maxCharsG = (int)((serverListWidth - 50) / 8);
+        if ((int)gLabel.length() > maxCharsG) gLabel = gLabel.substr(0, maxCharsG - 3) + "...";
+        ofDrawBitmapString(gLabel, panelX + 18, rowTop + 15);
+
+        // Delete [X] button for group
         float xBtnX = serverListWidth - xBtnSize - 8;
         float xBtnY = rowTop + (rowH - xBtnSize) / 2;
         bool xHovered = (mouseX >= xBtnX && mouseX <= xBtnX + xBtnSize &&
                          mouseY >= xBtnY && mouseY <= xBtnY + xBtnSize &&
                          mouseY >= panelY && mouseY < panelY + panelH);
-
         ofSetColor(xHovered ? ofColor(255, 80, 80) : ofColor(100));
         ofNoFill();
         ofDrawRectangle(xBtnX, xBtnY, xBtnSize, xBtnSize);
         ofFill();
-        // Draw X
         ofDrawLine(xBtnX + 4, xBtnY + 4, xBtnX + xBtnSize - 4, xBtnY + xBtnSize - 4);
         ofDrawLine(xBtnX + xBtnSize - 4, xBtnY + 4, xBtnX + 4, xBtnY + xBtnSize - 4);
 
         curY += rowH;
+
+        // Child slices (if not collapsed)
+        if (!group.collapsed) {
+            for (int si : sliceIndices) {
+                auto* screen = scene.getScreen(si);
+                if (!screen) continue;
+
+                float sliceTop = curY;
+                bool sliceSelected = scene.isSelected(si);
+                bool sliceHovered = (mouseX >= panelX && mouseX < serverListWidth &&
+                                     mouseY >= sliceTop && mouseY < sliceTop + rowH &&
+                                     mouseY >= panelY && mouseY < panelY + panelH);
+
+                if (sliceSelected) {
+                    ofSetColor(0, 120, 200, 60);
+                    ofDrawRectangle(panelX, sliceTop, serverListWidth, rowH);
+                } else if (sliceHovered) {
+                    ofSetColor(255, 255, 255, 20);
+                    ofDrawRectangle(panelX, sliceTop, serverListWidth, rowH);
+                }
+
+                ofSetColor(sliceSelected ? ofColor(0, 200, 255) : ofColor(160));
+                std::string sLabel = screen->name;
+                int maxCharsS = (int)((serverListWidth - 60) / 8);
+                if ((int)sLabel.length() > maxCharsS) sLabel = sLabel.substr(0, maxCharsS - 3) + "...";
+                ofDrawBitmapString(sLabel, panelX + 30, sliceTop + 15);
+
+                // Delete [X] for individual slice
+                float sxBtnX = serverListWidth - xBtnSize - 8;
+                float sxBtnY = sliceTop + (rowH - xBtnSize) / 2;
+                bool sxHovered = (mouseX >= sxBtnX && mouseX <= sxBtnX + xBtnSize &&
+                                  mouseY >= sxBtnY && mouseY <= sxBtnY + xBtnSize &&
+                                  mouseY >= panelY && mouseY < panelY + panelH);
+                ofSetColor(sxHovered ? ofColor(255, 80, 80) : ofColor(80));
+                ofNoFill();
+                ofDrawRectangle(sxBtnX, sxBtnY, xBtnSize, xBtnSize);
+                ofFill();
+                ofDrawLine(sxBtnX + 4, sxBtnY + 4, sxBtnX + xBtnSize - 4, sxBtnY + xBtnSize - 4);
+                ofDrawLine(sxBtnX + xBtnSize - 4, sxBtnY + 4, sxBtnX + 4, sxBtnY + xBtnSize - 4);
+
+                curY += rowH;
+            }
+        }
     }
 
-    if (scene.getScreenCount() == 0) {
+    if (scene.groups.empty()) {
         ofSetColor(100);
         ofDrawBitmapString("No screens", panelX + 10, curY + 15);
         curY += rowH;
@@ -401,11 +459,19 @@ void ofApp::drawServerList() {
         float rowTop = curY;
         float rowBot = curY + rowH;
 
-        // Check if assigned to any selected screen
+        // Check if assigned to the selected group or any selected screen's group
         bool assigned = false;
-        for (int si : scene.selectedIndices) {
-            auto* sel = scene.getScreen(si);
-            if (sel && sel->sourceIndex == (int)i) { assigned = true; break; }
+        if (selectedGroupId >= 0) {
+            auto* g = scene.getGroup(selectedGroupId);
+            if (g && g->sourceIndex == (int)i) assigned = true;
+        } else {
+            for (int si : scene.selectedIndices) {
+                auto* sel = scene.getScreen(si);
+                if (sel) {
+                    auto* g = scene.getGroup(sel->groupId);
+                    if (g && g->sourceIndex == (int)i) { assigned = true; break; }
+                }
+            }
         }
 
         bool hovered = (mouseX >= panelX && mouseX < serverListWidth &&
@@ -475,46 +541,138 @@ bool ofApp::handleSidebarClick(int x, int y) {
     float curY = panelY - sidebarScroll;
     curY += 28; // skip SCREENS header
 
-    // --- Screen rows ---
-    for (int i = 0; i < scene.getScreenCount(); i++) {
+    // --- Group + Slice rows ---
+    for (size_t gi = 0; gi < scene.groups.size(); gi++) {
+        auto& group = scene.groups[gi];
         float rowTop = curY;
-        float rowBot = curY + rowH;
 
-        if (y >= rowTop && y < rowBot) {
-            // Check if X delete button was clicked
+        if (y >= rowTop && y < rowTop + rowH) {
+            // Delete [X] button for group
             float xBtnX = serverListWidth - xBtnSize - 8;
-            float xBtnY = rowTop + (rowH - xBtnSize) / 2;
+            float xBtnY2 = rowTop + (rowH - xBtnSize) / 2;
             if (x >= xBtnX && x <= xBtnX + xBtnSize &&
-                y >= xBtnY && y <= xBtnY + xBtnSize) {
+                y >= xBtnY2 && y <= xBtnY2 + xBtnSize) {
                 pushUndo();
-                scene.removeScreen(i);
+                scene.removeGroup(group.id);
+                selectedGroupId = -1;
                 updatePropertiesForSelection();
                 return true;
             }
 
-            // Click on row — Shift=range, Cmd/Ctrl=toggle, plain=select only
-#ifdef TARGET_OSX
-            bool multiKey = ofGetKeyPressed(OF_KEY_SUPER);
-#else
-            bool multiKey = ofGetKeyPressed(OF_KEY_CONTROL);
-#endif
-            bool shiftKey = ofGetKeyPressed(OF_KEY_SHIFT);
-
-            if (shiftKey && lastClickedSidebarIndex >= 0) {
-                scene.selectRange(lastClickedSidebarIndex, i);
-            } else if (multiKey) {
-                scene.toggleSelected(i);
-            } else {
-                scene.selectOnly(i);
+            // Click on collapse arrow area (x < panelX + 18)
+            if (x < 18) {
+                group.collapsed = !group.collapsed;
+                return true;
             }
-            lastClickedSidebarIndex = i;
+
+            // Double-click detection on group header → rename
+            {
+                float now = ofGetElapsedTimef();
+                if (lastSidebarClickGroupId == group.id &&
+                    lastSidebarClickSliceIdx == -1 &&
+                    (now - lastSidebarClickTime) < 0.35f) {
+                    // Double-click → rename group
+                    std::string newName = ofSystemTextBoxDialog("Rename Screen", group.name);
+                    if (!newName.empty() && newName != group.name) {
+                        pushUndo();
+                        group.name = newName;
+                    }
+                    lastSidebarClickTime = 0;
+                    lastSidebarClickGroupId = -1;
+                    lastSidebarClickSliceIdx = -1;
+                    return true;
+                }
+                lastSidebarClickTime = now;
+                lastSidebarClickGroupId = group.id;
+                lastSidebarClickSliceIdx = -1;
+            }
+
+            // Click on group header = select all slices in group
+            auto indices = scene.getSliceIndicesForGroup(group.id);
+            scene.clearSelection();
+            for (int si : indices) {
+                scene.selectedIndices.insert(si);
+            }
+            if (!indices.empty()) scene.primarySelected = indices[0];
+            selectedGroupId = group.id;
             updatePropertiesForSelection();
             return true;
         }
         curY += rowH;
+
+        // Child slices (if not collapsed)
+        if (!group.collapsed) {
+            auto sliceIndices = scene.getSliceIndicesForGroup(group.id);
+            for (int si : sliceIndices) {
+                float sliceTop = curY;
+                if (y >= sliceTop && y < sliceTop + rowH) {
+                    // Delete [X] for individual slice
+                    float xBtnX = serverListWidth - xBtnSize - 8;
+                    float xBtnY2 = sliceTop + (rowH - xBtnSize) / 2;
+                    if (x >= xBtnX && x <= xBtnX + xBtnSize &&
+                        y >= xBtnY2 && y <= xBtnY2 + xBtnSize) {
+                        pushUndo();
+                        int gid = group.id;
+                        scene.removeScreen(si);
+                        // Clean up empty group
+                        if (scene.getSliceIndicesForGroup(gid).empty()) {
+                            scene.removeGroup(gid);
+                        }
+                        selectedGroupId = -1;
+                        updatePropertiesForSelection();
+                        return true;
+                    }
+
+                    // Double-click detection on slice → rename
+                    {
+                        float now = ofGetElapsedTimef();
+                        if (lastSidebarClickSliceIdx == si &&
+                            lastSidebarClickGroupId == -1 &&
+                            (now - lastSidebarClickTime) < 0.35f) {
+                            auto* scr = scene.getScreen(si);
+                            if (scr) {
+                                std::string newName = ofSystemTextBoxDialog("Rename Slice", scr->name);
+                                if (!newName.empty() && newName != scr->name) {
+                                    pushUndo();
+                                    scr->name = newName;
+                                }
+                            }
+                            lastSidebarClickTime = 0;
+                            lastSidebarClickGroupId = -1;
+                            lastSidebarClickSliceIdx = -1;
+                            return true;
+                        }
+                        lastSidebarClickTime = now;
+                        lastSidebarClickGroupId = -1;
+                        lastSidebarClickSliceIdx = si;
+                    }
+
+                    // Select individual slice
+#ifdef TARGET_OSX
+                    bool multiKey = ofGetKeyPressed(OF_KEY_SUPER);
+#else
+                    bool multiKey = ofGetKeyPressed(OF_KEY_CONTROL);
+#endif
+                    bool shiftKey = ofGetKeyPressed(OF_KEY_SHIFT);
+
+                    if (shiftKey && lastClickedSidebarIndex >= 0) {
+                        scene.selectRange(lastClickedSidebarIndex, si);
+                    } else if (multiKey) {
+                        scene.toggleSelected(si);
+                    } else {
+                        scene.selectOnly(si);
+                    }
+                    lastClickedSidebarIndex = si;
+                    selectedGroupId = -1;
+                    updatePropertiesForSelection();
+                    return true;
+                }
+                curY += rowH;
+            }
+        }
     }
 
-    if (scene.getScreenCount() == 0) curY += rowH;
+    if (scene.groups.empty()) curY += rowH;
 
     // Gap + separator + SERVERS header
     curY += 20 + 8 + 28;
@@ -522,17 +680,23 @@ bool ofApp::handleSidebarClick(int x, int y) {
     // --- Server rows ---
     for (size_t i = 0; i < servers.size(); i++) {
         float rowTop = curY;
-        float rowBot = curY + rowH;
 
-        if (y >= rowTop && y < rowBot) {
-            // Click on server → assign to all selected screens
-            if (scene.getSelectionCount() > 0) {
-                pushUndo();
+        if (y >= rowTop && y < rowTop + rowH) {
+            // Click on server → assign to selected group or selected slices' groups
+            pushUndo();
+            if (selectedGroupId >= 0) {
+                scene.assignSourceToGroup(selectedGroupId, (int)i);
+            } else if (scene.getSelectionCount() > 0) {
+                std::set<int> affectedGroups;
                 for (int si : scene.getSelectedIndicesSorted()) {
-                    scene.assignSourceToScreen(si, (int)i);
+                    auto* s = scene.getScreen(si);
+                    if (s) affectedGroups.insert(s->groupId);
                 }
-                updatePropertiesForSelection();
+                for (int gid : affectedGroups) {
+                    scene.assignSourceToGroup(gid, (int)i);
+                }
             }
+            updatePropertiesForSelection();
             return true;
         }
         curY += rowH;
@@ -616,9 +780,9 @@ void ofApp::drawStatusBar() {
             } else {
                 hint = gizmo.getModeString() +
 #ifdef TARGET_OSX
-                    "  |  S:Select  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  Cmd+Z:Undo  Cmd+S/O:Save/Open";
+                    "  |  S:Select  Shift+A:Screen  A:Slice  Del:Remove  L:Link  M:Map  H:UI  Tab:View";
 #else
-                    "  |  S:Select  A:Add  Del:Remove  L:Link  M:Map  H:UI  Tab:View  Ctrl+Z:Undo  Ctrl+S/O:Save/Open";
+                    "  |  S:Select  Shift+A:Screen  A:Slice  Del:Remove  L:Link  M:Map  H:UI  Tab:View";
 #endif
             }
         }
@@ -843,7 +1007,6 @@ void ofApp::drawMenuBar() {
             {"Position",      "", false, true, showPosition},
             {"Rotation",      "", false, true, showRotation},
             {"Size",          "", false, true, showScale},
-            {"Input Mapping", "", false, true, showCrop},
         };
         drawDropdown(viewX - 5, menuBarHeight, 200, items);
     }
@@ -980,9 +1143,9 @@ bool ofApp::handleMenuClick(int x, int y) {
     // View dropdown clicks
     if (viewMenuOpen) {
         float dropX = viewX - 5, dropW = 200;
-        // items: AmbientLight, sep, Position, Rotation, Scale, InputMapping
-        bool isSepV[] = {false, true, false, false, false, false};
-        int totalV = 6;
+        // items: AmbientLight, sep, Position, Rotation, Scale
+        bool isSepV[] = {false, true, false, false, false};
+        int totalV = 5;
         float iy = menuBarHeight;
 
         if (x >= dropX && x <= dropX + dropW) {
@@ -995,10 +1158,9 @@ bool ofApp::handleMenuClick(int x, int y) {
                         case 2: showPosition = !showPosition; break;
                         case 3: showRotation = !showRotation; break;
                         case 4: showScale = !showScale; break;
-                        case 5: showCrop = !showCrop; break;
                     }
                     propertiesPanel.updateGroupVisibility(
-                        showAmbientLight, showPosition, showRotation, showScale, showCrop);
+                        showAmbientLight, showPosition, showRotation, showScale);
                     return true;
                 }
                 iy += itemH;
@@ -1142,7 +1304,7 @@ void ofApp::drawContextMenu() {
     ofSetColor(35, 35, 35);
     ofDrawRectangle(dropX, dropY, dropW, headerH);
     ofSetColor(255);
-    std::string header = screen ? screen->name : "Screen";
+    std::string header = screen ? screen->name : "Slice";
     if (header.length() > 26) header = header.substr(0, 23) + "...";
     ofDrawBitmapString(header, dropX + 10, dropY + 18);
 
@@ -1213,13 +1375,14 @@ bool ofApp::handleContextMenuClick(int x, int y) {
                         cam.disableMouseInput();
                         break;
                     case CTX_DUPLICATE: {
-                        // Duplicate screen via JSON round-trip
+                        // Duplicate slice via JSON round-trip (same group)
                         if (screen) {
                             pushUndo();
                             ofJson j = screen->toJson();
                             auto dup = std::make_unique<ScreenObject>();
                             dup->fromJson(j);
                             dup->name = screen->name + " Copy";
+                            dup->groupId = screen->groupId;
                             // Offset position slightly
                             glm::vec3 pos = dup->getPosition();
                             pos.x += 50;
@@ -1229,7 +1392,6 @@ bool ofApp::handleContextMenuClick(int x, int y) {
                             if (!dup->sourceName.empty()) {
                                 scene.screens.push_back(std::move(dup));
                                 int newIdx = (int)scene.screens.size() - 1;
-                                // Try to reconnect by finding source index
                                 auto srvs = scene.getAvailableServers();
                                 for (int si = 0; si < (int)srvs.size(); si++) {
                                     if (srvs[si].displayName() == scene.screens[newIdx]->sourceName
@@ -1251,15 +1413,15 @@ bool ofApp::handleContextMenuClick(int x, int y) {
                     case CTX_DISCONNECT:
                         if (screen) {
                             pushUndo();
-                            screen->disconnectSource();
+                            scene.disconnectGroup(screen->groupId);
                         }
                         updatePropertiesForSelection();
                         break;
                     default:
-                        // Assign server (action = server index)
-                        if (it.action >= 0) {
+                        // Assign server to group (action = server index)
+                        if (it.action >= 0 && screen) {
                             pushUndo();
-                            scene.assignSourceToScreen(contextScreenIndex, it.action);
+                            scene.assignSourceToGroup(screen->groupId, it.action);
                             updatePropertiesForSelection();
                         }
                         break;
@@ -1279,10 +1441,13 @@ bool ofApp::handleContextMenuClick(int x, int y) {
 
 void ofApp::newProject() {
     pushUndo();
-    // Clear all screens and reset state
+    // Clear all screens, groups, and reset state
     while (scene.getScreenCount() > 0) {
         scene.removeScreen(0);
     }
+    scene.groups.clear();
+    scene.nextScreenId = 1;
+    scene.nextGroupId = 1;
     scene.clearSelection();
     propertiesPanel.setTarget(nullptr);
     currentProjectPath = "";
@@ -1290,8 +1455,11 @@ void ofApp::newProject() {
     autosaveEnabled = false;
     autosaveTimer = 0;
 
-    // Add a default screen
-    scene.addScreen("Screen 1");
+    // Add a default screen group with one slice
+    {
+        int gid = scene.addGroup("Screen 1");
+        scene.addSliceToGroup(gid, "Slice 1");
+    }
 
     // Reset camera
     cam.setDistance(800);
@@ -1636,20 +1804,56 @@ void ofApp::keyPressed(int key) {
     switch (key) {
         case 'a': case 'A': {
             pushUndo();
-            int idx = scene.addScreen();
-            scene.selectOnly(idx);
+            if (ofGetKeyPressed(OF_KEY_SHIFT)) {
+                // Shift+A: create new Screen group with one slice
+                int gid = scene.addGroup();
+                int idx = scene.addSliceToGroup(gid);
+                scene.selectOnly(idx);
+                selectedGroupId = gid;
+            } else {
+                // A: add slice to current group
+                int targetGroupId = -1;
+                if (selectedGroupId >= 0) {
+                    targetGroupId = selectedGroupId;
+                } else if (scene.getPrimarySelected() >= 0) {
+                    auto* sel = scene.getScreen(scene.getPrimarySelected());
+                    if (sel) targetGroupId = sel->groupId;
+                }
+                if (targetGroupId < 0 && !scene.groups.empty()) {
+                    targetGroupId = scene.groups[0].id;
+                }
+                if (targetGroupId < 0) {
+                    targetGroupId = scene.addGroup();
+                }
+                int idx = scene.addSliceToGroup(targetGroupId);
+                scene.selectOnly(idx);
+                selectedGroupId = -1;
+            }
             updatePropertiesForSelection();
             break;
         }
         case OF_KEY_DEL: case OF_KEY_BACKSPACE:
             if (scene.getSelectionCount() > 0) {
                 pushUndo();
-                // Delete all selected in reverse order to keep indices valid
+                // Collect groups that might become empty
+                std::set<int> affectedGroupIds;
                 auto indices = scene.getSelectedIndicesSorted();
+                for (int si : indices) {
+                    auto* s = scene.getScreen(si);
+                    if (s) affectedGroupIds.insert(s->groupId);
+                }
+                // Delete selected slices in reverse order
                 for (int i = (int)indices.size() - 1; i >= 0; i--) {
                     scene.removeScreen(indices[i]);
                 }
+                // Clean up empty groups
+                for (int gid : affectedGroupIds) {
+                    if (scene.getSliceIndicesForGroup(gid).empty()) {
+                        scene.removeGroup(gid);
+                    }
+                }
                 scene.clearSelection();
+                selectedGroupId = -1;
                 propertiesPanel.setTarget(nullptr);
             }
             break;
@@ -1701,10 +1905,10 @@ void ofApp::keyPressed(int key) {
 
         case 'l': case 'L':
             if (scene.getScreenCount() > 0) {
-                ofLogNotice("Link") << "Screens exist → confirm?";
+                ofLogNotice("Link") << "Slices exist → confirm?";
                 linkState = LinkState::Confirm;
             } else {
-                ofLogNotice("Link") << "No screens → choose rect";
+                ofLogNotice("Link") << "No slices → choose rect";
                 linkState = LinkState::ChooseRect;
             }
             break;
@@ -1720,25 +1924,42 @@ void ofApp::keyPressed(int key) {
             break;
 
         case 'd': case 'D':
-            // Disconnect source from all selected screens
-            if (scene.getSelectionCount() > 0) {
+            // Disconnect source from selected group(s)
+            if (selectedGroupId >= 0) {
                 pushUndo();
+                scene.disconnectGroup(selectedGroupId);
+                updatePropertiesForSelection();
+            } else if (scene.getSelectionCount() > 0) {
+                pushUndo();
+                std::set<int> gids;
                 for (int si : scene.getSelectedIndicesSorted()) {
-                    auto* screen = scene.getScreen(si);
-                    if (screen) screen->disconnectSource();
+                    auto* s = scene.getScreen(si);
+                    if (s) gids.insert(s->groupId);
+                }
+                for (int gid : gids) {
+                    scene.disconnectGroup(gid);
                 }
                 updatePropertiesForSelection();
             }
             break;
 
         default:
-            // 1-9: assign server to all selected screens
+            // 1-9: assign server to selected group(s)
             if (key >= '1' && key <= '9') {
                 int serverIdx = key - '1';
-                if (scene.getSelectionCount() > 0 && serverIdx < (int)servers.size()) {
+                if (serverIdx < (int)servers.size()) {
                     pushUndo();
-                    for (int si : scene.getSelectedIndicesSorted()) {
-                        scene.assignSourceToScreen(si, serverIdx);
+                    if (selectedGroupId >= 0) {
+                        scene.assignSourceToGroup(selectedGroupId, serverIdx);
+                    } else if (scene.getSelectionCount() > 0) {
+                        std::set<int> gids;
+                        for (int si : scene.getSelectedIndicesSorted()) {
+                            auto* s = scene.getScreen(si);
+                            if (s) gids.insert(s->groupId);
+                        }
+                        for (int gid : gids) {
+                            scene.assignSourceToGroup(gid, serverIdx);
+                        }
                     }
                     updatePropertiesForSelection();
                 }
@@ -1832,7 +2053,12 @@ void ofApp::loadResolumeXml(bool useInputRect) {
         float rx, ry, rw, rh;   // chosen rect in pixels (bounding box)
         std::vector<glm::vec2> contourPoints; // normalized 0-1 polygon contour (empty = rect)
     };
-    std::vector<SliceData> parsed;
+    struct ScreenGroupData {
+        std::string name;
+        std::vector<SliceData> slices;
+    };
+    std::vector<ScreenGroupData> parsedScreens;
+    std::vector<SliceData> currentSlices; // temp for current screen
 
     // Helper: parse a <Slice> or <Polygon> layer node
     auto parseLayer = [&](const ofXml& layerNode, bool isPolygon) {
@@ -1850,7 +2076,7 @@ void ofApp::loadResolumeXml(bool useInputRect) {
             if (!sd.name.empty()) break;
         }
         if (sd.name.empty() || sd.name == "Layer") {
-            sd.name = (isPolygon ? "Polygon " : "Slice ") + ofToString(parsed.size() + 1);
+            sd.name = (isPolygon ? "Polygon " : "Slice ") + ofToString(currentSlices.size() + 1);
         }
 
         // Get bounding rect (Input or Output)
@@ -1909,7 +2135,7 @@ void ofApp::loadResolumeXml(bool useInputRect) {
             }
         }
 
-        parsed.push_back(sd);
+        currentSlices.push_back(sd);
         ofLogNotice("ofApp") << "  + " << sd.name
             << (isPolygon ? " (polygon)" : "")
             << "  " << sd.rw << "x" << sd.rh
@@ -1936,6 +2162,8 @@ void ofApp::loadResolumeXml(bool useInputRect) {
         }
         ofLogNotice("ofApp") << "Screen: " << screenName;
 
+        currentSlices.clear();
+
         auto layers = screenNode.getChild("layers");
         if (layers.getName().empty()) {
             ofLogWarning("ofApp") << "  No <layers> found";
@@ -1950,24 +2178,42 @@ void ofApp::loadResolumeXml(bool useInputRect) {
                 parseLayer(layerNode, true);
             }
         }
+
+        if (!currentSlices.empty()) {
+            ScreenGroupData sgd;
+            sgd.name = screenName;
+            sgd.slices = currentSlices;
+            parsedScreens.push_back(sgd);
+        }
     }
 
-    if (parsed.empty()) {
+    // Flatten all slices for bounding box computation
+    std::vector<SliceData> allSlices;
+    for (auto& sg : parsedScreens) {
+        for (auto& sd : sg.slices) {
+            allSlices.push_back(sd);
+        }
+    }
+
+    if (allSlices.empty()) {
         ofLogWarning("ofApp") << "No slices found in XML!";
         return;
     }
 
-    // Clear existing screens
+    // Clear existing screens and groups
     pushUndo();
     while (scene.getScreenCount() > 0) {
         scene.removeScreen(0);
     }
+    scene.groups.clear();
+    scene.nextScreenId = 1;
+    scene.nextGroupId = 1;
     scene.clearSelection();
     propertiesPanel.setTarget(nullptr);
 
     // Compute total bounding box for layout and crop
     float totalMinX = 1e9f, totalMinY = 1e9f, totalMaxX = -1e9f, totalMaxY = -1e9f;
-    for (auto& sd : parsed) {
+    for (auto& sd : allSlices) {
         totalMinX = std::min(totalMinX, sd.rx);
         totalMinY = std::min(totalMinY, sd.ry);
         totalMaxX = std::max(totalMaxX, sd.rx + sd.rw);
@@ -1980,37 +2226,41 @@ void ofApp::loadResolumeXml(bool useInputRect) {
     float maxDim = std::max(totalW, totalH);
     float scaleFactor = (maxDim > 0) ? 600.0f / maxDim : 1.0f;
 
-    for (auto& sd : parsed) {
-        float w3d = sd.rw * scaleFactor;
-        float h3d = sd.rh * scaleFactor;
+    for (auto& sg : parsedScreens) {
+        int gid = scene.addGroup(sg.name);
 
-        // Position: remap to 3D space, flip Y, center around X=0
-        float cx = (sd.rx + sd.rw * 0.5f - totalMinX) * scaleFactor;
-        float cy = (totalMaxY - (sd.ry + sd.rh * 0.5f)) * scaleFactor;
-        cx -= totalW * scaleFactor * 0.5f;
+        for (auto& sd : sg.slices) {
+            float w3d = sd.rw * scaleFactor;
+            float h3d = sd.rh * scaleFactor;
 
-        int idx = scene.addScreen(sd.name);
-        auto* screen = scene.getScreen(idx);
-        if (screen) {
-            screen->plane.set(w3d, h3d, 2, 2);
-            screen->setPosition(glm::vec3(cx, cy, 0));
+            // Position: remap to 3D space, flip Y, center around X=0
+            float cx = (sd.rx + sd.rw * 0.5f - totalMinX) * scaleFactor;
+            float cy = (totalMaxY - (sd.ry + sd.rh * 0.5f)) * scaleFactor;
+            cx -= totalW * scaleFactor * 0.5f;
 
-            // Crop: slice region relative to total bounding box
-            float cropX = (sd.rx - totalMinX) / totalW;
-            float cropY = (sd.ry - totalMinY) / totalH;
-            float cropW = sd.rw / totalW;
-            float cropH = sd.rh / totalH;
-            screen->setCropRect(ofRectangle(cropX, cropY, cropW, cropH));
+            int idx = scene.addSliceToGroup(gid, sd.name);
+            auto* screen = scene.getScreen(idx);
+            if (screen) {
+                screen->plane.set(w3d, h3d, 2, 2);
+                screen->setPosition(glm::vec3(cx, cy, 0));
 
-            // Apply polygon mask if available
-            if (!sd.contourPoints.empty()) {
-                screen->setMask(sd.contourPoints);
+                // Crop: slice region relative to total bounding box
+                float cropX = (sd.rx - totalMinX) / totalW;
+                float cropY = (sd.ry - totalMinY) / totalH;
+                float cropW = sd.rw / totalW;
+                float cropH = sd.rh / totalH;
+                screen->setCropRect(ofRectangle(cropX, cropY, cropW, cropH));
+
+                // Apply polygon mask if available
+                if (!sd.contourPoints.empty()) {
+                    screen->setMask(sd.contourPoints);
+                }
             }
         }
     }
 
     std::string presetName = ofFilePath::getBaseName(xmlPath);
-    ofLogNotice("ofApp") << "OK: " << parsed.size() << " slices from \"" << presetName
+    ofLogNotice("ofApp") << "OK: " << allSlices.size() << " slices in " << parsedScreens.size() << " screens from \"" << presetName
         << "\" (" << (useInputRect ? "Input" : "Output") << "Rect)";
 }
 
@@ -2201,6 +2451,7 @@ void ofApp::mousePressed(int x, int y, int button) {
             if (hit >= 0) {
                 contextScreenIndex = hit;
                 scene.selectOnly(hit);
+                selectedGroupId = -1;
                 updatePropertiesForSelection();
                 contextMenuPos = glm::vec2(x, y);
                 contextMenuOpen = true;
@@ -2305,6 +2556,7 @@ void ofApp::mousePressed(int x, int y, int button) {
                 auto* s = scene.getScreen(si);
                 if (s) targets.push_back(s);
             }
+            gizmo.mirrorYaw = propertiesPanel.isMirrorYaw();
             gizmo.beginDrag(glm::vec2(x, y), cam, *primary, targets);
             return;
         }
@@ -2323,6 +2575,7 @@ void ofApp::mousePressed(int x, int y, int button) {
         } else {
             scene.selectOnly(hit);
         }
+        selectedGroupId = -1;
         updatePropertiesForSelection();
     } else {
         if (!multiKey) {
@@ -2838,7 +3091,7 @@ void ofApp::drawAboutDialog() {
 
     // Description
     ofSetColor(200);
-    ofDrawBitmapString("3D virtual screen layout tool", px + 30, py + 90);
+    ofDrawBitmapString("3D virtual slice layout tool", px + 30, py + 90);
     ofDrawBitmapString("for stage design.", px + 30, py + 108);
 
     ofSetColor(140);

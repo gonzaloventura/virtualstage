@@ -74,7 +74,6 @@ private:
     bool showPosition = true;
     bool showRotation = true;
     bool showScale = true;
-    bool showCrop = true;
 
     // Camera lock (View mode)
     bool cameraLocked = false;
@@ -109,6 +108,14 @@ private:
 
     // Sidebar shift-click range selection
     int lastClickedSidebarIndex = -1;
+
+    // Double-click rename detection
+    float lastSidebarClickTime = 0;
+    int lastSidebarClickGroupId = -1;   // group header that was last clicked
+    int lastSidebarClickSliceIdx = -1;  // slice index that was last clicked
+
+    // Selected group header (-1 = individual slice selection)
+    int selectedGroupId = -1;
 
     // Undo/redo
     UndoManager undoManager;
