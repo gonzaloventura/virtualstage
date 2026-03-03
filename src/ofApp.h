@@ -79,6 +79,9 @@ private:
     bool showRotation = true;
     bool showScale = true;
 
+    // Fog effect
+    bool fogEnabled = false;
+
     // Camera lock (View mode)
     bool cameraLocked = false;
     void drawCameraLock();

@@ -243,6 +243,25 @@ void ofApp::draw() {
 
     // --- 3D Scene ---
     ofEnableDepthTest();
+
+    // Fog setup
+    if (fogEnabled) {
+        GLfloat fogColor[4];
+        BackgroundMode bgm2 = preferences.getBgMode();
+        if (bgm2 == BackgroundMode::Solid) {
+            ofColor fc = preferences.getBgColor();
+            fogColor[0] = fc.r / 255.0f; fogColor[1] = fc.g / 255.0f;
+            fogColor[2] = fc.b / 255.0f; fogColor[3] = 1.0f;
+        } else {
+            fogColor[0] = 0.15f; fogColor[1] = 0.15f; fogColor[2] = 0.15f; fogColor[3] = 1.0f;
+        }
+        glEnable(GL_FOG);
+        glFogi(GL_FOG_MODE, GL_LINEAR);
+        glFogfv(GL_FOG_COLOR, fogColor);
+        glFogf(GL_FOG_START, 2000.0f);
+        glFogf(GL_FOG_END, 5000.0f);
+    }
+
     cam.begin();
 
     if (appMode == AppMode::Designer) {
@@ -271,6 +290,10 @@ void ofApp::draw() {
     }
 
     cam.end();
+
+    if (fogEnabled) {
+        glDisable(GL_FOG);
+    }
 
     // --- 2D Overlay ---
     ofDisableDepthTest();
@@ -1137,6 +1160,7 @@ void ofApp::drawMenuBar() {
     if (viewMenuOpen) {
         std::vector<std::tuple<std::string, std::string, bool, bool, bool>> items = {
             {"Ambient Light", "", false, true, showAmbientLight},
+            {"Fog",           "", false, true, fogEnabled},
             {"",              "", true,  false, false},
             {"Position",      "", false, true, showPosition},
             {"Rotation",      "", false, true, showRotation},
@@ -1294,9 +1318,9 @@ bool ofApp::handleMenuClick(int x, int y) {
     // View dropdown clicks
     if (viewMenuOpen) {
         float dropX = viewX - 5, dropW = 200;
-        // items: AmbientLight, sep, Position, Rotation, Scale
-        bool isSepV[] = {false, true, false, false, false};
-        int totalV = 5;
+        // items: AmbientLight, Fog, sep, Position, Rotation, Scale
+        bool isSepV[] = {false, false, true, false, false, false};
+        int totalV = 6;
         float iy = menuBarHeight;
 
         if (x >= dropX && x <= dropX + dropW) {
@@ -1306,9 +1330,10 @@ bool ofApp::handleMenuClick(int x, int y) {
                     viewMenuOpen = false;
                     switch (i) {
                         case 0: showAmbientLight = !showAmbientLight; break;
-                        case 2: showPosition = !showPosition; break;
-                        case 3: showRotation = !showRotation; break;
-                        case 4: showScale = !showScale; break;
+                        case 1: fogEnabled = !fogEnabled; break;
+                        case 3: showPosition = !showPosition; break;
+                        case 4: showRotation = !showRotation; break;
+                        case 5: showScale = !showScale; break;
                     }
                     propertiesPanel.updateGroupVisibility(
                         showAmbientLight, showPosition, showRotation, showScale);
