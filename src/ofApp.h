@@ -117,6 +117,10 @@ private:
     // Selected group header (-1 = individual slice selection)
     int selectedGroupId = -1;
 
+    // Clipboard (copy/paste slices)
+    std::vector<ofJson> clipboard;
+    int clipboardGroupId = -1; // source group of copied slices
+
     // Undo/redo
     UndoManager undoManager;
     void pushUndo();

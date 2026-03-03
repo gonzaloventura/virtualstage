@@ -1666,6 +1666,61 @@ void ofApp::keyPressed(int key) {
             }
             return;
         }
+        if (key == 'c' || key == 'C') {
+            // Copy selected slices to clipboard
+            clipboard.clear();
+            clipboardGroupId = -1;
+            auto indices = scene.getSelectedIndicesSorted();
+            for (int si : indices) {
+                auto* s = scene.getScreen(si);
+                if (s) {
+                    clipboard.push_back(s->toJson());
+                    if (clipboardGroupId < 0) clipboardGroupId = s->groupId;
+                }
+            }
+            if (!clipboard.empty()) {
+                ofLogNotice("ofApp") << "Copied " << clipboard.size() << " slice(s)";
+            }
+            return;
+        }
+        if (key == 'v' || key == 'V') {
+            // Paste slices from clipboard
+            if (!clipboard.empty()) {
+                pushUndo();
+                int targetGroupId = selectedGroupId;
+                if (targetGroupId < 0 && scene.getPrimarySelected() >= 0) {
+                    auto* sel = scene.getScreen(scene.getPrimarySelected());
+                    if (sel) targetGroupId = sel->groupId;
+                }
+                if (targetGroupId < 0 && !scene.groups.empty()) {
+                    targetGroupId = scene.groups[0].id;
+                }
+                if (targetGroupId < 0) {
+                    targetGroupId = scene.addGroup();
+                }
+                scene.clearSelection();
+                for (auto& cj : clipboard) {
+                    int idx = scene.addScreen();
+                    auto* s = scene.getScreen(idx);
+                    if (s) {
+                        s->fromJson(cj);
+                        s->groupId = targetGroupId;
+                        // Offset position so paste doesn't overlap original
+                        glm::vec3 pos = s->getPosition();
+                        pos.x += 50;
+                        pos.y -= 50;
+                        s->setPosition(pos);
+                        s->name += " Copy";
+                        scene.selectedIndices.insert(idx);
+                        if (scene.primarySelected < 0) scene.primarySelected = idx;
+                    }
+                }
+                scene.reconnectSources();
+                updatePropertiesForSelection();
+                ofLogNotice("ofApp") << "Pasted " << clipboard.size() << " slice(s)";
+            }
+            return;
+        }
     }
 #else
     {
@@ -1696,6 +1751,60 @@ void ofApp::keyPressed(int key) {
                     updatePropertiesForSelection();
                     ofLogNotice("ofApp") << "Undo";
                 }
+            }
+            return;
+        }
+        // Ctrl+C = copy (Ctrl+C=3)
+        if ((ctrlHeld && (key == 'c' || key == 'C')) || key == 3) {
+            clipboard.clear();
+            clipboardGroupId = -1;
+            auto indices = scene.getSelectedIndicesSorted();
+            for (int si : indices) {
+                auto* s = scene.getScreen(si);
+                if (s) {
+                    clipboard.push_back(s->toJson());
+                    if (clipboardGroupId < 0) clipboardGroupId = s->groupId;
+                }
+            }
+            if (!clipboard.empty()) {
+                ofLogNotice("ofApp") << "Copied " << clipboard.size() << " slice(s)";
+            }
+            return;
+        }
+        // Ctrl+V = paste (Ctrl+V=22)
+        if ((ctrlHeld && (key == 'v' || key == 'V')) || key == 22) {
+            if (!clipboard.empty()) {
+                pushUndo();
+                int targetGroupId = selectedGroupId;
+                if (targetGroupId < 0 && scene.getPrimarySelected() >= 0) {
+                    auto* sel = scene.getScreen(scene.getPrimarySelected());
+                    if (sel) targetGroupId = sel->groupId;
+                }
+                if (targetGroupId < 0 && !scene.groups.empty()) {
+                    targetGroupId = scene.groups[0].id;
+                }
+                if (targetGroupId < 0) {
+                    targetGroupId = scene.addGroup();
+                }
+                scene.clearSelection();
+                for (auto& cj : clipboard) {
+                    int idx = scene.addScreen();
+                    auto* s = scene.getScreen(idx);
+                    if (s) {
+                        s->fromJson(cj);
+                        s->groupId = targetGroupId;
+                        glm::vec3 pos = s->getPosition();
+                        pos.x += 50;
+                        pos.y -= 50;
+                        s->setPosition(pos);
+                        s->name += " Copy";
+                        scene.selectedIndices.insert(idx);
+                        if (scene.primarySelected < 0) scene.primarySelected = idx;
+                    }
+                }
+                scene.reconnectSources();
+                updatePropertiesForSelection();
+                ofLogNotice("ofApp") << "Pasted " << clipboard.size() << " slice(s)";
             }
             return;
         }
