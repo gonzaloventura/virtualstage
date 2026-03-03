@@ -25,16 +25,23 @@ struct SceneSnapshot {
     std::set<int> selectedIndices;
     int primarySelected = -1;
     int selectedStageElement = -1;
+    std::string description;
 };
 
 class UndoManager {
 public:
-    void pushState(Scene& scene);
+    void pushState(Scene& scene, const std::string& desc = "");
     bool undo(Scene& scene);
     bool redo(Scene& scene);
 
     bool canUndo() const { return currentIndex > 0; }
     bool canRedo() const { return currentIndex < (int)history.size() - 1; }
+
+    // History info for visual display
+    int getHistorySize() const { return (int)history.size(); }
+    int getCurrentIndex() const { return currentIndex; }
+    std::string getDescription(int index) const;
+    bool jumpTo(Scene& scene, int index);
 
     void clear();
 

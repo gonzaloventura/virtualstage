@@ -130,7 +130,9 @@ private:
 
     // Undo/redo
     UndoManager undoManager;
-    void pushUndo();
+    void pushUndo(const std::string& desc = "");
+    bool showUndoHistory = false;
+    void drawUndoHistory();
 
     // Properties panel undo support
     bool propsDirty = false;

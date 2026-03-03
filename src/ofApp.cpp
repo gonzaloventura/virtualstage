@@ -335,6 +335,9 @@ void ofApp::draw() {
     }
     drawStatusBar();
 
+    // Undo history panel
+    drawUndoHistory();
+
     // Modal overlays (drawn on top of everything)
     if (showAboutDialog) {
         drawAboutDialog();
@@ -1798,6 +1801,12 @@ void ofApp::keyPressed(int key) {
         if (key == OF_KEY_ESC) return; // ESC just closes the menu
     }
 
+    // Close undo history on ESC
+    if (showUndoHistory && key == OF_KEY_ESC) {
+        showUndoHistory = false;
+        return;
+    }
+
     // Close About dialog on any key
     if (showAboutDialog) {
         showAboutDialog = false;
@@ -2235,6 +2244,10 @@ void ofApp::keyPressed(int key) {
         case 'h': case 'H':
             showUI = !showUI;
             propertiesPanel.setVisible(showUI);
+            break;
+
+        case 'u': case 'U':
+            showUndoHistory = !showUndoHistory;
             break;
 
         case 'l': case 'L':
@@ -3063,8 +3076,67 @@ void ofApp::windowResized(int w, int h) {
 
 // --- Helper methods ---
 
-void ofApp::pushUndo() {
-    undoManager.pushState(scene);
+void ofApp::pushUndo(const std::string& desc) {
+    undoManager.pushState(scene, desc);
+}
+
+void ofApp::drawUndoHistory() {
+    if (!showUndoHistory) return;
+
+    float panelW = 250;
+    float panelH = 300;
+    float px = ofGetWidth() / 2 - panelW / 2;
+    float py = ofGetHeight() / 2 - panelH / 2;
+    float rowH = 20;
+
+    // Background
+    ofSetColor(30, 30, 30, 230);
+    ofDrawRectangle(px, py, panelW, panelH);
+    ofNoFill();
+    ofSetColor(0, 120, 200);
+    ofDrawRectangle(px, py, panelW, panelH);
+    ofFill();
+
+    // Title
+    ofSetColor(0, 180, 255);
+    ofDrawBitmapString("Undo History", px + 10, py + 18);
+
+    ofSetColor(60);
+    ofDrawLine(px + 10, py + 25, px + panelW - 10, py + 25);
+
+    // Scrollable list
+    float listY = py + 30;
+    int maxVisible = (int)((panelH - 50) / rowH);
+    int total = undoManager.getHistorySize();
+    int current = undoManager.getCurrentIndex();
+
+    // Show items centered around current
+    int startIdx = std::max(0, current - maxVisible / 2);
+    int endIdx = std::min(total, startIdx + maxVisible);
+
+    for (int i = startIdx; i < endIdx; i++) {
+        float ry = listY + (i - startIdx) * rowH;
+        bool isCurrent = (i == current);
+
+        if (isCurrent) {
+            ofSetColor(0, 120, 200, 60);
+            ofDrawRectangle(px + 5, ry, panelW - 10, rowH);
+        }
+
+        ofSetColor(isCurrent ? ofColor(255) : ofColor(140));
+        std::string label = ofToString(i) + ": ";
+        std::string desc = undoManager.getDescription(i);
+        label += desc.empty() ? "(state)" : desc;
+
+        // Truncate
+        int maxChars = (int)((panelW - 20) / 8);
+        if ((int)label.length() > maxChars) label = label.substr(0, maxChars - 3) + "...";
+        ofDrawBitmapString(label, px + 10, ry + 14);
+    }
+
+    // Hint
+    ofSetColor(100);
+    ofDrawBitmapString("ESC to close", px + 10, py + panelH - 8);
 }
 
 void ofApp::updatePropertiesForSelection() {

@@ -69,8 +69,9 @@ void UndoManager::restoreState(Scene& scene, const SceneSnapshot& snapshot) {
     scene.reconnectSources();
 }
 
-void UndoManager::pushState(Scene& scene) {
+void UndoManager::pushState(Scene& scene, const std::string& desc) {
     SceneSnapshot snap = captureState(scene);
+    snap.description = desc;
 
     // Truncate any redo history
     if (currentIndex + 1 < (int)history.size()) {
@@ -85,6 +86,20 @@ void UndoManager::pushState(Scene& scene) {
         history.erase(history.begin());
         currentIndex--;
     }
+}
+
+std::string UndoManager::getDescription(int index) const {
+    if (index >= 0 && index < (int)history.size()) {
+        return history[index].description;
+    }
+    return "";
+}
+
+bool UndoManager::jumpTo(Scene& scene, int index) {
+    if (index < 0 || index >= (int)history.size()) return false;
+    currentIndex = index;
+    restoreState(scene, history[currentIndex]);
+    return true;
 }
 
 bool UndoManager::undo(Scene& scene) {
