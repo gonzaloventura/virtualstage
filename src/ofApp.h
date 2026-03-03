@@ -139,6 +139,10 @@ private:
     void openProject();
     void newProject();
 
+    // Screenshot
+    float screenshotFlashTimer = 0;
+    void takeScreenshot();
+
     // Autosave
     bool autosaveEnabled = false;
     float autosaveInterval = 15.0f;

@@ -122,6 +122,11 @@ void ofApp::update() {
         }
     }
 
+    // Screenshot flash timer
+    if (screenshotFlashTimer > 0) {
+        screenshotFlashTimer -= ofGetLastFrameTime();
+    }
+
     // Refresh UI if preferences were updated from cloud
     if (prefsNeedRefresh.exchange(false)) {
         propertiesPanel.refreshUnitLabels();
@@ -801,6 +806,13 @@ void ofApp::drawStatusBar() {
             }
         }
         ofDrawBitmapString(hint, ofGetWidth() - hint.length() * 8 - 10, barY + 20);
+    }
+
+    // Screenshot saved flash
+    if (screenshotFlashTimer > 0) {
+        float alpha = std::min(1.0f, screenshotFlashTimer / 0.5f) * 255;
+        ofSetColor(0, 255, 100, (int)alpha);
+        ofDrawBitmapString("Screenshot saved to Desktop", ofGetWidth() / 2 - 100, barY + 20);
     }
 
     ofSetColor(255);
@@ -1495,6 +1507,20 @@ static std::string getDefaultProjectsDir() {
     return docs;
 }
 
+void ofApp::takeScreenshot() {
+    ofImage img;
+    img.grabScreen(0, 0, ofGetWidth(), ofGetHeight());
+
+    // Build filename with timestamp
+    std::string timestamp = ofGetTimestampString("%Y%m%d_%H%M%S");
+    std::string desktopPath = ofFilePath::getUserHomeDir() + "/Desktop";
+    std::string filename = desktopPath + "/VirtualStage_" + timestamp + ".png";
+
+    img.save(filename);
+    screenshotFlashTimer = 1.5f; // show "Screenshot saved" for 1.5s
+    ofLogNotice("ofApp") << "Screenshot saved: " << filename;
+}
+
 void ofApp::saveProject(bool saveAs) {
     std::string path = currentProjectPath;
 
@@ -1867,6 +1893,9 @@ void ofApp::keyPressed(int key) {
             return;
         case 'f': case 'F':
             ofToggleFullscreen();
+            return;
+        case OF_KEY_F10:
+            takeScreenshot();
             return;
     }
 
