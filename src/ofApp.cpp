@@ -85,6 +85,14 @@ void ofApp::setup() {
 
     settingsModal.onPreferenceChanged = [this]() {
         propertiesPanel.refreshUnitLabels();
+        // Apply title-bar decoration preference immediately if in View mode
+        if (appMode == AppMode::View) {
+            auto* win = dynamic_cast<ofAppGLFWWindow*>(ofGetWindowPtr());
+            if (win) {
+                glfwSetWindowAttrib(win->getGLFWWindow(), GLFW_DECORATED,
+                                    preferences.getHideTitleBarInView() ? GLFW_FALSE : GLFW_TRUE);
+            }
+        }
         // Sync to cloud in background
         if (authManager.isAuthenticated()) {
             std::string jsonStr = preferences.toJsonString();
@@ -100,9 +108,6 @@ void ofApp::update() {
     scene.update();
     // Refresh server list periodically
     servers = scene.getAvailableServers();
-
-    // Update background from ambient light slider (0-100 → 0-60)
-    bgBrightness = (int)(propertiesPanel.getAmbientLight() * 0.6f);
 
     // Restrict camera input to the 3D viewport area (excludes sidebar, menu bar, status bar)
     if (appMode == AppMode::Designer && showUI) {
@@ -212,11 +217,12 @@ void ofApp::update() {
 }
 
 void ofApp::draw() {
-    // Draw background based on preferences
+    // Draw background based on preferences, modulated by ambient light
+    float ambientFactor = propertiesPanel.getAmbientLight() / 100.0f; // 0..1
     BackgroundMode bgm = preferences.getBgMode();
     if (bgm == BackgroundMode::Gradient) {
-        ofColor top = preferences.getBgGradientTop();
-        ofColor bot = preferences.getBgGradientBottom();
+        ofColor top = preferences.getBgGradientTop() * ambientFactor;
+        ofColor bot = preferences.getBgGradientBottom() * ambientFactor;
         ofBackgroundGradient(top, bot, OF_GRADIENT_LINEAR);
     } else if (bgm == BackgroundMode::Image) {
         std::string imgPath = preferences.getBgImagePath();
@@ -226,11 +232,11 @@ void ofApp::draw() {
         }
         ofBackground(0);
         if (bgImage.isAllocated()) {
-            ofSetColor(255);
+            ofSetColor(255 * ambientFactor);
             bgImage.draw(0, 0, ofGetWidth(), ofGetHeight());
         }
     } else {
-        ofColor solidColor = preferences.getBgColor();
+        ofColor solidColor = preferences.getBgColor() * ambientFactor;
         ofBackground(solidColor);
     }
 
@@ -244,24 +250,6 @@ void ofApp::draw() {
     // --- 3D Scene ---
     ofEnableDepthTest();
 
-    // Fog setup
-    if (fogEnabled) {
-        GLfloat fogColor[4];
-        BackgroundMode bgm2 = preferences.getBgMode();
-        if (bgm2 == BackgroundMode::Solid) {
-            ofColor fc = preferences.getBgColor();
-            fogColor[0] = fc.r / 255.0f; fogColor[1] = fc.g / 255.0f;
-            fogColor[2] = fc.b / 255.0f; fogColor[3] = 1.0f;
-        } else {
-            fogColor[0] = 0.15f; fogColor[1] = 0.15f; fogColor[2] = 0.15f; fogColor[3] = 1.0f;
-        }
-        glEnable(GL_FOG);
-        glFogi(GL_FOG_MODE, GL_LINEAR);
-        glFogfv(GL_FOG_COLOR, fogColor);
-        glFogf(GL_FOG_START, 2000.0f);
-        glFogf(GL_FOG_END, 5000.0f);
-    }
-
     cam.begin();
 
     if (appMode == AppMode::Designer) {
@@ -270,30 +258,38 @@ void ofApp::draw() {
 
     scene.draw(appMode == AppMode::View);
 
-    // Gizmo for selected object (Designer mode only) — draw on primary selected
-    if (appMode == AppMode::Designer && scene.getPrimarySelected() >= 0 && scene.getScreen(scene.getPrimarySelected())) {
-        ofDisableDepthTest();
-        gizmo.draw(*scene.getScreen(scene.getPrimarySelected()), cam);
+    // Gizmo for selected object (Designer mode only)
+    if (appMode == AppMode::Designer) {
+        glm::vec3 gizmoPos;
+        bool hasGizmoTarget = false;
 
-        // Draw edge snap guide lines
-        if (gizmo.isDragging() && !gizmo.activeSnapLines.empty()) {
-            ofPushStyle();
-            ofSetColor(0, 200, 255, 180);
-            ofSetLineWidth(1);
-            for (auto& sl : gizmo.activeSnapLines) {
-                ofDrawLine(sl.a, sl.b);
-            }
-            ofPopStyle();
+        if (scene.getPrimarySelected() >= 0) {
+            auto* scr = scene.getScreen(scene.getPrimarySelected());
+            if (scr) { gizmoPos = scr->getPosition(); hasGizmoTarget = true; }
+        } else if (scene.selectedStageElement >= 0) {
+            auto* elem = scene.getStageElement(scene.selectedStageElement);
+            if (elem) { gizmoPos = elem->getPosition(); hasGizmoTarget = true; }
         }
 
-        ofEnableDepthTest();
+        if (hasGizmoTarget) {
+            ofDisableDepthTest();
+            gizmo.draw(gizmoPos, cam);
+
+            if (gizmo.isDragging() && !gizmo.activeSnapLines.empty()) {
+                ofPushStyle();
+                ofSetColor(0, 200, 255, 180);
+                ofSetLineWidth(1);
+                for (auto& sl : gizmo.activeSnapLines) {
+                    ofDrawLine(sl.a, sl.b);
+                }
+                ofPopStyle();
+            }
+
+            ofEnableDepthTest();
+        }
     }
 
     cam.end();
-
-    if (fogEnabled) {
-        glDisable(GL_FOG);
-    }
 
     // --- 2D Overlay ---
     ofDisableDepthTest();
@@ -333,7 +329,9 @@ void ofApp::draw() {
     if (appMode != AppMode::View) {
         drawMenuBar();
     }
-    drawStatusBar();
+    if (appMode != AppMode::View || !preferences.getHideStatusBarInView()) {
+        drawStatusBar();
+    }
 
     // Undo history panel
     drawUndoHistory();
@@ -517,7 +515,51 @@ void ofApp::drawServerList() {
     curY += 8;
     ofSetColor(200);
     ofDrawBitmapString("STAGE", panelX + 10, curY + 18);
+
+    // [+] button
+    {
+        float btnSize = 16;
+        float btnX = serverListWidth - btnSize - 8;
+        float btnY = curY + 3;
+        bool btnHov = (mouseX >= btnX && mouseX <= btnX + btnSize &&
+                       mouseY >= btnY && mouseY <= btnY + btnSize &&
+                       mouseY >= panelY && mouseY < panelY + panelH);
+        ofSetColor(btnHov ? ofColor(0, 200, 150) : ofColor(120));
+        ofNoFill();
+        ofDrawRectangle(btnX, btnY, btnSize, btnSize);
+        ofFill();
+        // Plus sign
+        ofDrawLine(btnX + 4, btnY + btnSize / 2, btnX + btnSize - 4, btnY + btnSize / 2);
+        ofDrawLine(btnX + btnSize / 2, btnY + 4, btnX + btnSize / 2, btnY + btnSize - 4);
+    }
+
     curY += 28;
+
+    // Stage add dropdown
+    if (stageAddMenuOpen) {
+        float ddX = serverListWidth - 110;
+        float ddY = stageAddMenuY;
+        float ddW = 100;
+        float itemH = 22;
+        std::string items[] = {"Floor", "Truss", "Layher"};
+        int numItems = 3;
+
+        // Background
+        ofSetColor(40, 40, 50, 240);
+        ofDrawRectangle(ddX, ddY, ddW, itemH * numItems + 4);
+
+        for (int i = 0; i < numItems; i++) {
+            float iy = ddY + 2 + i * itemH;
+            bool hov = (mouseX >= ddX && mouseX <= ddX + ddW &&
+                        mouseY >= iy && mouseY < iy + itemH);
+            if (hov) {
+                ofSetColor(0, 150, 120, 100);
+                ofDrawRectangle(ddX + 1, iy, ddW - 2, itemH);
+            }
+            ofSetColor(220);
+            ofDrawBitmapString(items[i], ddX + 10, iy + 15);
+        }
+    }
 
     for (int ei = 0; ei < scene.getStageElementCount(); ei++) {
         auto* elem = scene.getStageElement(ei);
@@ -642,6 +684,24 @@ void ofApp::drawServerList() {
         // Thumb
         ofSetColor(100);
         ofDrawRectangle(serverListWidth - 5, panelY + scrollPos, 4, scrollbarH);
+    }
+
+    // --- Floating drag label ---
+    if (sidebarDragging && !sidebarDragLabel.empty()) {
+        int mx = ofGetMouseX();
+        int my = ofGetMouseY();
+        float labelW = sidebarDragLabel.size() * 7 + 16;
+        float labelH = 20;
+        float lx = mx + 12;
+        float ly = my - 10;
+
+        // Background
+        ofSetColor(60, 60, 80, 220);
+        ofDrawRectRounded(lx, ly, labelW, labelH, 4);
+
+        // Text
+        ofSetColor(255);
+        ofDrawBitmapString(sidebarDragLabel, lx + 8, ly + 14);
     }
 
     ofSetColor(255);
@@ -785,6 +845,14 @@ bool ofApp::handleSidebarClick(int x, int y) {
                     lastClickedSidebarIndex = si;
                     selectedGroupId = -1;
                     updatePropertiesForSelection();
+
+                    // Record potential drag start
+                    sidebarDragSliceIdx = si;
+                    sidebarDragStart = glm::vec2(x, y);
+                    sidebarDragging = false;
+                    auto* ds = scene.getScreen(si);
+                    sidebarDragLabel = ds ? ds->name : "";
+
                     return true;
                 }
                 curY += rowH;
@@ -795,7 +863,46 @@ bool ofApp::handleSidebarClick(int x, int y) {
     if (scene.groups.empty()) curY += rowH;
 
     // --- STAGE section ---
-    curY += 12 + 8 + 28; // gap + separator + STAGE header
+    curY += 12 + 8; // gap + separator
+
+    // [+] button click (in header row)
+    {
+        float btnSize = 16;
+        float btnX = serverListWidth - btnSize - 8;
+        float btnY = curY + 3;
+        if (x >= btnX && x <= btnX + btnSize && y >= btnY && y <= btnY + btnSize) {
+            stageAddMenuOpen = !stageAddMenuOpen;
+            stageAddMenuY = curY + 26;
+            return true;
+        }
+    }
+
+    // Stage add dropdown click
+    if (stageAddMenuOpen) {
+        float ddX = serverListWidth - 110;
+        float ddY = stageAddMenuY;
+        float ddW = 100;
+        float itemH2 = 22;
+        int numItems = 3;
+
+        if (x >= ddX && x <= ddX + ddW && y >= ddY && y < ddY + itemH2 * numItems + 4) {
+            int idx = (int)((y - ddY - 2) / itemH2);
+            if (idx >= 0 && idx < numItems) {
+                pushUndo();
+                StageElementType types[] = {StageElementType::Floor, StageElementType::Truss, StageElementType::Layher};
+                int ni = scene.addStageElement(types[idx]);
+                scene.selectedStageElement = ni;
+                scene.clearSelection();
+                selectedGroupId = -1;
+            }
+            stageAddMenuOpen = false;
+            return true;
+        }
+        // Click outside dropdown closes it
+        stageAddMenuOpen = false;
+    }
+
+    curY += 28; // STAGE header height
 
     for (int ei = 0; ei < scene.getStageElementCount(); ei++) {
         float elemTop = curY;
@@ -1163,7 +1270,6 @@ void ofApp::drawMenuBar() {
     if (viewMenuOpen) {
         std::vector<std::tuple<std::string, std::string, bool, bool, bool>> items = {
             {"Ambient Light", "", false, true, showAmbientLight},
-            {"Fog",           "", false, true, fogEnabled},
             {"",              "", true,  false, false},
             {"Position",      "", false, true, showPosition},
             {"Rotation",      "", false, true, showRotation},
@@ -1321,9 +1427,9 @@ bool ofApp::handleMenuClick(int x, int y) {
     // View dropdown clicks
     if (viewMenuOpen) {
         float dropX = viewX - 5, dropW = 200;
-        // items: AmbientLight, Fog, sep, Position, Rotation, Scale
-        bool isSepV[] = {false, false, true, false, false, false};
-        int totalV = 6;
+        // items: AmbientLight, sep, Position, Rotation, Scale
+        bool isSepV[] = {false, true, false, false, false};
+        int totalV = 5;
         float iy = menuBarHeight;
 
         if (x >= dropX && x <= dropX + dropW) {
@@ -1333,10 +1439,9 @@ bool ofApp::handleMenuClick(int x, int y) {
                     viewMenuOpen = false;
                     switch (i) {
                         case 0: showAmbientLight = !showAmbientLight; break;
-                        case 1: fogEnabled = !fogEnabled; break;
-                        case 3: showPosition = !showPosition; break;
-                        case 4: showRotation = !showRotation; break;
-                        case 5: showScale = !showScale; break;
+                        case 2: showPosition = !showPosition; break;
+                        case 3: showRotation = !showRotation; break;
+                        case 4: showScale = !showScale; break;
                     }
                     propertiesPanel.updateGroupVisibility(
                         showAmbientLight, showPosition, showRotation, showScale);
@@ -2032,6 +2137,9 @@ void ofApp::keyPressed(int key) {
         if (win) {
             glfwSetWindowAttrib(win->getGLFWWindow(), GLFW_FLOATING,
                                 appMode == AppMode::View ? GLFW_TRUE : GLFW_FALSE);
+            bool hideTitle = (appMode == AppMode::View) && preferences.getHideTitleBarInView();
+            glfwSetWindowAttrib(win->getGLFWWindow(), GLFW_DECORATED,
+                                hideTitle ? GLFW_FALSE : GLFW_TRUE);
         }
         return;
     }
@@ -2077,7 +2185,7 @@ void ofApp::keyPressed(int key) {
         case OF_KEY_F7:
             if (appMode == AppMode::Designer) {
                 pushUndo();
-                int bi = scene.addStageElement(StageElementType::Box);
+                int bi = scene.addStageElement(StageElementType::Layher);
                 scene.selectedStageElement = bi;
                 scene.clearSelection();
                 selectedGroupId = -1;
@@ -2193,6 +2301,9 @@ void ofApp::keyPressed(int key) {
                 scene.clearSelection();
                 selectedGroupId = -1;
                 propertiesPanel.setTarget(nullptr);
+            } else if (scene.selectedStageElement >= 0) {
+                pushUndo();
+                scene.removeStageElement(scene.selectedStageElement);
             }
             break;
 
@@ -2817,6 +2928,9 @@ void ofApp::mousePressed(int x, int y, int button) {
 
     if (button != OF_MOUSE_BUTTON_LEFT) return;
 
+    // Close stage add dropdown on any click outside sidebar handler
+    // (sidebar click handler manages its own close logic)
+
     // Context menu click
     if (handleContextMenuClick(x, y)) return;
 
@@ -2890,34 +3004,56 @@ void ofApp::mousePressed(int x, int y, int button) {
         return;
     }
 
-    // Check gizmo hit first (use primary selected for gizmo reference)
-    if (scene.getPrimarySelected() >= 0) {
-        ScreenObject* primary = scene.getScreen(scene.getPrimarySelected());
-        if (primary && gizmo.hitTest(cam, glm::vec2(x, y), *primary)) {
+    // Check gizmo hit first (screens or stage elements)
+    {
+        glm::vec3 gizmoRefPos;
+        bool hasGizmoRef = false;
+
+        if (scene.getPrimarySelected() >= 0) {
+            auto* primary = scene.getScreen(scene.getPrimarySelected());
+            if (primary) { gizmoRefPos = primary->getPosition(); hasGizmoRef = true; }
+        } else if (scene.selectedStageElement >= 0) {
+            auto* elem = scene.getStageElement(scene.selectedStageElement);
+            if (elem) { gizmoRefPos = elem->getPosition(); hasGizmoRef = true; }
+        }
+
+        if (hasGizmoRef && gizmo.hitTest(cam, glm::vec2(x, y), gizmoRefPos)) {
             cam.disableMouseInput();
             gizmoInteracting = true;
             pushUndo();
-            // Collect all selected screens as targets
-            std::vector<ScreenObject*> targets;
-            for (int si : scene.getSelectedIndicesSorted()) {
-                auto* s = scene.getScreen(si);
-                if (s) targets.push_back(s);
+
+            std::vector<GizmoTarget> targets;
+            if (scene.getPrimarySelected() >= 0) {
+                for (int si : scene.getSelectedIndicesSorted()) {
+                    auto* s = scene.getScreen(si);
+                    if (s) targets.push_back(GizmoTarget(s));
+                }
+                gizmo.mirrorYaw = propertiesPanel.isMirrorYaw();
+            } else {
+                auto* elem = scene.getStageElement(scene.selectedStageElement);
+                if (elem) targets.push_back(GizmoTarget(elem));
+                gizmo.mirrorYaw = false;
             }
-            gizmo.mirrorYaw = propertiesPanel.isMirrorYaw();
+
             gizmo.setEdgeSnapScreens(&scene.screens);
-            gizmo.beginDrag(glm::vec2(x, y), cam, *primary, targets);
+            if (!targets.empty()) {
+                gizmo.beginDrag(glm::vec2(x, y), cam, targets[0], targets);
+            }
             return;
         }
     }
 
-    // Pick objects in scene
+    // Pick objects in scene (screens first, then stage elements)
     int hit = scene.pick(cam, glm::vec2(x, y));
+    int elemHit = (hit < 0) ? scene.pickStageElement(cam, glm::vec2(x, y)) : -1;
+
 #ifdef TARGET_OSX
     bool multiKey = ofGetKeyPressed(OF_KEY_SUPER);
 #else
     bool multiKey = ofGetKeyPressed(OF_KEY_CONTROL);
 #endif
     if (hit >= 0) {
+        scene.selectedStageElement = -1;
         if (multiKey) {
             scene.toggleSelected(hit);
         } else {
@@ -2925,17 +3061,21 @@ void ofApp::mousePressed(int x, int y, int button) {
         }
         selectedGroupId = -1;
         updatePropertiesForSelection();
+    } else if (elemHit >= 0) {
+        scene.clearSelection();
+        selectedGroupId = -1;
+        scene.selectedStageElement = elemHit;
+        propertiesPanel.setTarget(nullptr);
     } else {
+        scene.selectedStageElement = -1;
         if (!multiKey) {
             if (selectMode) {
-                // Select mode: start box selection
                 cam.disableMouseInput();
                 boxSelecting = true;
                 boxSelectStart = boxSelectEnd = glm::vec2(x, y);
                 auto* win = static_cast<ofAppGLFWWindow*>(ofGetWindowPtr())->getGLFWWindow();
                 glfwSetCursor(win, crosshairCursor);
             } else {
-                // Normal mode: clear selection, let camera orbit
                 scene.clearSelection();
                 updatePropertiesForSelection();
             }
@@ -3006,6 +3146,15 @@ void ofApp::mouseDragged(int x, int y, int button) {
 
     if (appMode != AppMode::Designer) return;
 
+    // Sidebar drag reorder detection
+    if (sidebarDragSliceIdx >= 0 && !sidebarDragging) {
+        float dist = glm::distance(glm::vec2(x, y), sidebarDragStart);
+        if (dist > 5.0f) {
+            sidebarDragging = true;
+        }
+    }
+    if (sidebarDragging) return; // Don't process other drags while sidebar dragging
+
     // Box selection drag
     if (boxSelecting) {
         boxSelectEnd = glm::vec2(x, y);
@@ -3018,8 +3167,80 @@ void ofApp::mouseDragged(int x, int y, int button) {
     }
 }
 
+void ofApp::handleSidebarDrop(int x, int y) {
+    if (sidebarDragSliceIdx < 0 || sidebarDragSliceIdx >= scene.getScreenCount()) return;
+
+    // Determine drop target: which group and position?
+    float panelY = menuBarHeight;
+    float rowH = 22.0f;
+    float curY = panelY - sidebarScroll + 28; // skip SCREENS header
+
+    for (auto& group : scene.groups) {
+        float groupTop = curY;
+        if (y >= groupTop && y < groupTop + rowH) {
+            // Dropped on a group header → move slice to this group
+            auto* scr = scene.getScreen(sidebarDragSliceIdx);
+            if (scr && scr->groupId != group.id) {
+                pushUndo("Move slice to " + group.name);
+                scr->groupId = group.id;
+            }
+            return;
+        }
+        curY += rowH;
+
+        if (!group.collapsed) {
+            auto sliceIndices = scene.getSliceIndicesForGroup(group.id);
+            for (size_t j = 0; j < sliceIndices.size(); j++) {
+                int si = sliceIndices[j];
+                float sliceTop = curY;
+                if (y >= sliceTop && y < sliceTop + rowH) {
+                    // Dropped on a slice → reorder
+                    if (si != sidebarDragSliceIdx) {
+                        pushUndo("Reorder slice");
+                        // Move dragged screen to be adjacent to target
+                        auto dragged = std::move(scene.screens[sidebarDragSliceIdx]);
+                        scene.screens.erase(scene.screens.begin() + sidebarDragSliceIdx);
+
+                        // Find new position of target (may have shifted)
+                        int newTargetIdx = -1;
+                        for (int k = 0; k < (int)scene.screens.size(); k++) {
+                            if (scene.screens[k].get() == scene.getScreen(si > sidebarDragSliceIdx ? si - 1 : si)) {
+                                newTargetIdx = k;
+                                break;
+                            }
+                        }
+                        // Also set the group to match
+                        dragged->groupId = group.id;
+
+                        if (newTargetIdx >= 0) {
+                            scene.screens.insert(scene.screens.begin() + newTargetIdx + 1, std::move(dragged));
+                        } else {
+                            scene.screens.push_back(std::move(dragged));
+                        }
+
+                        // Fix selection
+                        scene.clearSelection();
+                    }
+                    return;
+                }
+                curY += rowH;
+            }
+        }
+    }
+}
+
 void ofApp::mouseReleased(int x, int y, int button) {
     if (authModal.isVisible() || cloudLoadState != CloudLoadState::Hidden) return;
+
+    // Sidebar drag reorder release
+    if (sidebarDragging && sidebarDragSliceIdx >= 0) {
+        handleSidebarDrop(x, y);
+        sidebarDragging = false;
+        sidebarDragSliceIdx = -1;
+        return;
+    }
+    sidebarDragging = false;
+    sidebarDragSliceIdx = -1;
 
     // Restore cursor when middle-click released
     if (button == OF_MOUSE_BUTTON_MIDDLE && middleMouseDown) {

@@ -115,7 +115,12 @@ public:
     int getStageElementCount() const;
     int selectedStageElement = -1;
 
+    // 3D picking for stage elements
+    int pickStageElement(const ofCamera& cam, const glm::vec2& screenPos);
+
 private:
+    bool rayIntersectsAABB(const glm::vec3& rayOrigin, const glm::vec3& rayDir,
+                           const StageElement& elem, float& t);
     ofLight light;
 
 #ifdef TARGET_OSX

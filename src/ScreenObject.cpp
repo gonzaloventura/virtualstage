@@ -75,6 +75,7 @@ bool ScreenObject::hasMask() const {
 ofJson ScreenObject::toJson() const {
     ofJson j;
     j["name"] = name;
+    j["groupId"] = groupId;
     j["width"] = plane.getWidth();
     j["height"] = plane.getHeight();
 
@@ -113,6 +114,7 @@ ofJson ScreenObject::toJson() const {
 
 void ScreenObject::fromJson(const ofJson& j) {
     if (j.contains("name")) name = j["name"].get<std::string>();
+    groupId = j.value("groupId", -1);
 
     float w = j.value("width", 320.0f);
     float h = j.value("height", 180.0f);
@@ -361,6 +363,17 @@ void ScreenObject::draw(bool viewMode) {
         }
     };
 
+    // Enable face culling: front face only for content, back face = black
+    glEnable(GL_CULL_FACE);
+
+    // Draw back face first: solid black (like a real LED panel casing)
+    glCullFace(GL_BACK); // cull back → only back face visible (OF winding)
+    ofSetColor(0);
+    drawMesh();
+
+    // Now draw front face only
+    glCullFace(GL_FRONT); // cull front → only front face visible (OF winding)
+
     // In View mode, draw solid black base first (like a real LED panel —
     // alpha in the Syphon source will composite against black, not transparent)
     if (viewMode) {
@@ -516,6 +529,8 @@ void ScreenObject::draw(bool viewMode) {
         ofSetColor(80);
         drawMesh();
     }
+
+    glDisable(GL_CULL_FACE);
 
     // Border outline - only in Designer mode
     if (!viewMode) {

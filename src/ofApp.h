@@ -79,8 +79,9 @@ private:
     bool showRotation = true;
     bool showScale = true;
 
-    // Fog effect
-    bool fogEnabled = false;
+    // Stage element add dropdown
+    bool stageAddMenuOpen = false;
+    float stageAddMenuY = 0; // Y position where dropdown opens
 
     // Camera lock (View mode)
     bool cameraLocked = false;
@@ -115,6 +116,13 @@ private:
 
     // Sidebar shift-click range selection
     int lastClickedSidebarIndex = -1;
+
+    // Sidebar drag reorder
+    bool sidebarDragging = false;
+    int sidebarDragSliceIdx = -1;
+    glm::vec2 sidebarDragStart;
+    std::string sidebarDragLabel;
+    void handleSidebarDrop(int x, int y);
 
     // Double-click rename detection
     float lastSidebarClickTime = 0;

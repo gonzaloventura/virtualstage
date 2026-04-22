@@ -1,6 +1,35 @@
 #include "win_byte_fix.h"
 #include "Gizmo.h"
 
+// --- GizmoTarget accessors ---
+glm::vec3 GizmoTarget::getPosition() const {
+    return (type == Screen) ? screen->getPosition() : element->getPosition();
+}
+void GizmoTarget::setPosition(const glm::vec3& p) {
+    if (type == Screen) screen->setPosition(p); else element->setPosition(p);
+}
+glm::vec3 GizmoTarget::getRotationEuler() const {
+    return (type == Screen) ? screen->getRotationEuler() : element->getRotationEuler();
+}
+void GizmoTarget::setRotationEuler(const glm::vec3& e) {
+    if (type == Screen) screen->setRotationEuler(e); else element->setRotationEuler(e);
+}
+glm::vec3 GizmoTarget::getScale() const {
+    return (type == Screen) ? screen->getScale() : element->getScale();
+}
+void GizmoTarget::setScale(const glm::vec3& s) {
+    if (type == Screen) screen->setScale(s); else element->setScale(s);
+}
+float GizmoTarget::getHalfWidth() const {
+    if (type == Screen) return screen->getPlaneWidth() * screen->getScale().x * 0.5f;
+    return element->width * element->getScale().x * 0.5f;
+}
+float GizmoTarget::getHalfHeight() const {
+    if (type == Screen) return screen->getPlaneHeight() * screen->getScale().y * 0.5f;
+    return element->height * element->getScale().y * 0.5f;
+}
+
+// --- Gizmo ---
 float Gizmo::getGizmoSize(const glm::vec3& pos, const ofCamera& cam) const {
     return glm::distance(pos, cam.getPosition()) * 0.12f;
 }
@@ -41,14 +70,12 @@ float Gizmo::hitTestRing(const ofCamera& cam, const glm::vec2& screenPos,
     return minDist;
 }
 
-void Gizmo::draw(const ScreenObject& target, const ofCamera& cam) {
-    glm::vec3 pos = target.getPosition();
+void Gizmo::draw(const glm::vec3& pos, const ofCamera& cam) {
     float size = getGizmoSize(pos, cam);
 
     ofPushStyle();
 
     if (mode == Mode::Translate) {
-        // Draw axis lines with arrow cones
         for (int a = 0; a < 3; a++) {
             Axis axis = static_cast<Axis>(a + 1);
             bool active = (activeAxis == axis);
@@ -59,7 +86,6 @@ void Gizmo::draw(const ScreenObject& target, const ofCamera& cam) {
             ofSetColor(getAxisColor(axis, active));
             ofDrawLine(pos, end);
 
-            // Arrowhead
             ofPushMatrix();
             ofTranslate(end);
             if (axis == Axis::X) ofRotateZDeg(-90);
@@ -68,7 +94,6 @@ void Gizmo::draw(const ScreenObject& target, const ofCamera& cam) {
             ofPopMatrix();
         }
     } else if (mode == Mode::Rotate) {
-        // Draw rotation rings
         int segments = 48;
         for (int a = 0; a < 3; a++) {
             Axis axis = static_cast<Axis>(a + 1);
@@ -89,7 +114,6 @@ void Gizmo::draw(const ScreenObject& target, const ofCamera& cam) {
             ring.draw();
         }
     } else if (mode == Mode::Scale) {
-        // Draw axis lines with cubes at the ends
         for (int a = 0; a < 3; a++) {
             Axis axis = static_cast<Axis>(a + 1);
             bool active = (activeAxis == axis);
@@ -100,7 +124,6 @@ void Gizmo::draw(const ScreenObject& target, const ofCamera& cam) {
             ofSetColor(getAxisColor(axis, active));
             ofDrawLine(pos, end);
 
-            // Scale cube
             float cubeSize = size * 0.06f;
             ofDrawBox(end, cubeSize, cubeSize, cubeSize);
         }
@@ -111,16 +134,14 @@ void Gizmo::draw(const ScreenObject& target, const ofCamera& cam) {
 }
 
 bool Gizmo::hitTest(const ofCamera& cam, const glm::vec2& screenPos,
-                    const ScreenObject& target) {
-    glm::vec3 pos = target.getPosition();
+                    const glm::vec3& pos) {
     float size = getGizmoSize(pos, cam);
-    float threshold = 20.0f; // pixels
+    float threshold = 20.0f;
 
     activeAxis = Axis::None;
     float bestDist = threshold;
 
     if (mode == Mode::Rotate) {
-        // Ring-based hit detection for rotation mode
         float ringRadius = size * 0.8f;
         for (int a = 0; a < 3; a++) {
             Axis axis = static_cast<Axis>(a + 1);
@@ -131,7 +152,6 @@ bool Gizmo::hitTest(const ofCamera& cam, const glm::vec2& screenPos,
             }
         }
     } else {
-        // Line-segment hit detection for Translate/Scale
         for (int a = 0; a < 3; a++) {
             Axis axis = static_cast<Axis>(a + 1);
             glm::vec3 dir = getAxisDirection(axis);
@@ -163,19 +183,18 @@ bool Gizmo::hitTest(const ofCamera& cam, const glm::vec2& screenPos,
 }
 
 void Gizmo::beginDrag(const glm::vec2& screenPos, const ofCamera& cam,
-                      const ScreenObject& primary,
-                      const std::vector<ScreenObject*>& allTargets) {
+                      const GizmoTarget& primary,
+                      const std::vector<GizmoTarget>& allTargets) {
     dragging = true;
     dragStart = screenPos;
 
     dragTargets.clear();
-    for (auto* t : allTargets) {
-        if (!t) continue;
+    for (auto& t : allTargets) {
         DragStartState state;
         state.target = t;
-        state.startPos = t->getPosition();
-        state.startRot = t->getRotationEuler();
-        state.startScale = t->getScale();
+        state.startPos = t.getPosition();
+        state.startRot = t.getRotationEuler();
+        state.startScale = t.getScale();
         dragTargets.push_back(state);
     }
 }
@@ -185,7 +204,6 @@ void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam) {
 
     glm::vec2 delta = screenPos - dragStart;
 
-    // Use the first target (primary) for screen-space projection reference
     const auto& primaryState = dragTargets[0];
 
     if (mode == Mode::Translate) {
@@ -211,25 +229,25 @@ void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam) {
                 newPos.z = std::round(newPos.z / snapSize) * snapSize;
             }
 
-            // Edge snap: compare dragged screen edges with other screens
+            // Edge snap
             if (edgeSnapEnabled && edgeSnapScreens) {
-                float hw = state.target->getPlaneWidth() * state.target->getScale().x * 0.5f;
-                float hh = state.target->getPlaneHeight() * state.target->getScale().y * 0.5f;
+                float hw = state.target.getHalfWidth();
+                float hh = state.target.getHalfHeight();
 
-                // Edges of the dragged screen (axis-aligned approximation)
                 float myLeft   = newPos.x - hw;
                 float myRight  = newPos.x + hw;
                 float myTop    = newPos.y + hh;
                 float myBottom = newPos.y - hh;
 
                 for (auto& other : *edgeSnapScreens) {
-                    if (other.get() == state.target) continue;
-                    // Skip screens that are also being dragged
-                    bool isDragTarget = false;
+                    // Skip self
+                    bool isSelf = false;
                     for (auto& dt : dragTargets) {
-                        if (dt.target == other.get()) { isDragTarget = true; break; }
+                        if (dt.target.type == GizmoTarget::Screen && dt.target.screen == other.get()) {
+                            isSelf = true; break;
+                        }
                     }
-                    if (isDragTarget) continue;
+                    if (isSelf) continue;
 
                     glm::vec3 oPos = other->getPosition();
                     float oHW = other->getPlaneWidth() * other->getScale().x * 0.5f;
@@ -287,20 +305,27 @@ void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam) {
                             });
                         }
                     }
+
+                    // Z-axis snap (depth alignment, center-to-center)
+                    if (std::abs(newPos.z - oPos.z) < edgeSnapThreshold) {
+                        newPos.z = oPos.z;
+                        activeSnapLines.push_back({
+                            glm::vec3(std::min(myLeft, oLeft) - 50, newPos.y, oPos.z),
+                            glm::vec3(std::max(myRight, oRight) + 50, newPos.y, oPos.z)
+                        });
+                    }
                 }
             }
 
-            state.target->setPosition(newPos);
+            state.target.setPosition(newPos);
         }
 
     } else if (mode == Mode::Rotate) {
         float degrees = delta.x * 0.5f;
 
-        // Mirror Yaw: when rotating Y axis with exactly 2 targets
         bool doMirror = mirrorYaw && activeAxis == Axis::Y && dragTargets.size() == 2;
 
         if (doMirror) {
-            // Determine left/right by starting X position
             auto* stateA = &dragTargets[0];
             auto* stateB = &dragTargets[1];
             bool aIsLeft = (stateA->startPos.x < stateB->startPos.x - 0.1f)
@@ -312,8 +337,8 @@ void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam) {
             glm::vec3 rightRot = right->startRot;
             leftRot.y += degrees;
             rightRot.y -= degrees;
-            left->target->setRotationEuler(leftRot);
-            right->target->setRotationEuler(rightRot);
+            left->target.setRotationEuler(leftRot);
+            right->target.setRotationEuler(rightRot);
         } else {
             for (auto& state : dragTargets) {
                 glm::vec3 newRot = state.startRot;
@@ -323,7 +348,7 @@ void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam) {
                     case Axis::Z: newRot.z += degrees; break;
                     default: break;
                 }
-                state.target->setRotationEuler(newRot);
+                state.target.setRotationEuler(newRot);
             }
         }
 
@@ -338,7 +363,7 @@ void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam) {
                 case Axis::Z: newScale.z = std::max(0.01f, state.startScale.z + scaleDelta); break;
                 default: break;
             }
-            state.target->setScale(newScale);
+            state.target.setScale(newScale);
         }
     }
 }

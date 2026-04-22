@@ -10,9 +10,10 @@
 
 class ScreenObject {
 public:
-    ScreenObject(const std::string& name = "Screen", float width = 320.0f, float height = 180.0f);
+    ScreenObject(const std::string& name = "Slice", float width = 320.0f, float height = 180.0f);
 
     std::string name;
+    int groupId = -1;  // parent ScreenGroup ID
     ofPlanePrimitive plane;
 
     // Transform convenience

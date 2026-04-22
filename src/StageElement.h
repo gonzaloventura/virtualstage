@@ -2,11 +2,11 @@
 #include "ofMain.h"
 #include <string>
 
-enum class StageElementType { Floor, Truss, Box };
+enum class StageElementType { Floor, Truss, Layher };
 
 class StageElement {
 public:
-    StageElement(StageElementType type = StageElementType::Box, const std::string& name = "");
+    StageElement(StageElementType type = StageElementType::Layher, const std::string& name = "");
 
     std::string name;
     StageElementType type;
@@ -30,6 +30,9 @@ public:
     // Drawing
     void draw(bool selected = false);
 
+    // Transform matrix (for 3D picking)
+    glm::mat4 getGlobalTransformMatrix() const;
+
     // Serialization
     ofJson toJson() const;
     void fromJson(const ofJson& j);
@@ -38,5 +41,5 @@ private:
     ofNode node;
     void drawFloor();
     void drawTruss();
-    void drawBox();
+    void drawLayher();
 };

@@ -80,6 +80,8 @@ void Preferences::loadLocal() {
         if (j.contains("bgImagePath") && j["bgImagePath"].is_string()) {
             bgImagePath = j["bgImagePath"].get<std::string>();
         }
+        if (j.contains("hideStatusBarInView")) hideStatusBarInView = j.value("hideStatusBarInView", false);
+        if (j.contains("hideTitleBarInView")) hideTitleBarInView = j.value("hideTitleBarInView", false);
     } catch (...) {}
 }
 
@@ -100,6 +102,8 @@ void Preferences::saveLocal() {
     j["bgGradientTop"] = colorToJson(bgGradientTop);
     j["bgGradientBottom"] = colorToJson(bgGradientBottom);
     if (!bgImagePath.empty()) j["bgImagePath"] = bgImagePath;
+    j["hideStatusBarInView"] = hideStatusBarInView;
+    j["hideTitleBarInView"] = hideTitleBarInView;
 
     std::ofstream f(getPrefsPath());
     if (f.is_open()) {
@@ -182,6 +186,26 @@ void Preferences::setBgImagePath(const std::string& path) {
     bgImagePath = path;
 }
 
+bool Preferences::getHideStatusBarInView() const {
+    std::lock_guard<std::mutex> lock(mtx);
+    return hideStatusBarInView;
+}
+
+void Preferences::setHideStatusBarInView(bool v) {
+    std::lock_guard<std::mutex> lock(mtx);
+    hideStatusBarInView = v;
+}
+
+bool Preferences::getHideTitleBarInView() const {
+    std::lock_guard<std::mutex> lock(mtx);
+    return hideTitleBarInView;
+}
+
+void Preferences::setHideTitleBarInView(bool v) {
+    std::lock_guard<std::mutex> lock(mtx);
+    hideTitleBarInView = v;
+}
+
 // ── Conversion ──────────────────────────────────────────────────────────────
 // Base mapping: 1 OGL unit = 1 cm → 100 OGL = 1 m
 
@@ -215,6 +239,8 @@ std::string Preferences::toJsonString() const {
     j["bgGradientTop"] = colorToJson(bgGradientTop);
     j["bgGradientBottom"] = colorToJson(bgGradientBottom);
     if (!bgImagePath.empty()) j["bgImagePath"] = bgImagePath;
+    j["hideStatusBarInView"] = hideStatusBarInView;
+    j["hideTitleBarInView"] = hideTitleBarInView;
     return j.dump();
 }
 
@@ -234,5 +260,7 @@ void Preferences::fromJsonString(const std::string& jsonStr) {
         if (j.contains("bgImagePath") && j["bgImagePath"].is_string()) {
             bgImagePath = j["bgImagePath"].get<std::string>();
         }
+        if (j.contains("hideStatusBarInView")) hideStatusBarInView = j.value("hideStatusBarInView", false);
+        if (j.contains("hideTitleBarInView")) hideTitleBarInView = j.value("hideTitleBarInView", false);
     } catch (...) {}
 }

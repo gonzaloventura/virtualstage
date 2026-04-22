@@ -385,6 +385,56 @@ int Scene::getStageElementCount() const {
     return (int)stageElements.size();
 }
 
+int Scene::pickStageElement(const ofCamera& cam, const glm::vec2& screenPos) {
+    glm::vec3 nearPoint = cam.screenToWorld(glm::vec3(screenPos.x, screenPos.y, 0.0f));
+    glm::vec3 farPoint = cam.screenToWorld(glm::vec3(screenPos.x, screenPos.y, 1.0f));
+    glm::vec3 rayDir = glm::normalize(farPoint - nearPoint);
+    glm::vec3 rayOrigin = nearPoint;
+
+    int closestIndex = -1;
+    float closestT = std::numeric_limits<float>::max();
+
+    for (int i = 0; i < (int)stageElements.size(); i++) {
+        float t;
+        if (rayIntersectsAABB(rayOrigin, rayDir, *stageElements[i], t)) {
+            if (t < closestT) {
+                closestT = t;
+                closestIndex = i;
+            }
+        }
+    }
+    return closestIndex;
+}
+
+bool Scene::rayIntersectsAABB(const glm::vec3& rayOrigin, const glm::vec3& rayDir,
+                               const StageElement& elem, float& t) {
+    glm::mat4 inv = glm::inverse(elem.getGlobalTransformMatrix());
+    glm::vec3 localOrigin = glm::vec3(inv * glm::vec4(rayOrigin, 1.0f));
+    glm::vec3 localDir = glm::normalize(glm::vec3(inv * glm::vec4(rayDir, 0.0f)));
+
+    // AABB in local space: [-w/2, w/2] x [0, h] x [-d/2, d/2]
+    glm::vec3 bmin(-elem.width * 0.5f, 0, -elem.depth * 0.5f);
+    glm::vec3 bmax(elem.width * 0.5f, elem.height, elem.depth * 0.5f);
+
+    // Slab intersection test
+    float tmin = -1e9f, tmax = 1e9f;
+    for (int i = 0; i < 3; i++) {
+        if (std::abs(localDir[i]) < 1e-8f) {
+            if (localOrigin[i] < bmin[i] || localOrigin[i] > bmax[i]) return false;
+        } else {
+            float t1 = (bmin[i] - localOrigin[i]) / localDir[i];
+            float t2 = (bmax[i] - localOrigin[i]) / localDir[i];
+            if (t1 > t2) std::swap(t1, t2);
+            tmin = std::max(tmin, t1);
+            tmax = std::min(tmax, t2);
+            if (tmin > tmax) return false;
+        }
+    }
+    if (tmax < 0) return false;
+    t = (tmin >= 0) ? tmin : tmax;
+    return true;
+}
+
 // --- Project Save/Load ---
 
 bool Scene::saveProject(const std::string& path, const ofJson& cameraJson) const {

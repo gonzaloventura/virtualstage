@@ -21,6 +21,7 @@ void PropertiesPanel::setup(float x, float y) {
     rotGui.add(rotX);
     rotGui.add(rotY);
     rotGui.add(rotZ);
+    rotGui.add(mirrorYaw);
 
     sizeGui.setup("Size");
     sizeGui.add(widthParam);
@@ -29,11 +30,8 @@ void PropertiesPanel::setup(float x, float y) {
     curvatureGui.setup("Curvature");
     curvatureGui.add(curvatureParam);
 
-    cropGui.setup("Input Mapping (M to edit)");
-    cropGui.add(cropX);
-    cropGui.add(cropY);
-    cropGui.add(cropW);
-    cropGui.add(cropH);
+    gapGui.setup("Spacing");
+    gapGui.add(gapParam);
 
     // Add listeners
     posX.addListener(this, &PropertiesPanel::onParamChanged);
@@ -45,11 +43,9 @@ void PropertiesPanel::setup(float x, float y) {
     widthParam.addListener(this, &PropertiesPanel::onParamChanged);
     heightParam.addListener(this, &PropertiesPanel::onParamChanged);
     curvatureParam.addListener(this, &PropertiesPanel::onParamChanged);
-    cropX.addListener(this, &PropertiesPanel::onParamChanged);
-    cropY.addListener(this, &PropertiesPanel::onParamChanged);
-    cropW.addListener(this, &PropertiesPanel::onParamChanged);
-    cropH.addListener(this, &PropertiesPanel::onParamChanged);
+    gapParam.addListener(this, &PropertiesPanel::onParamChanged);
     ambientReset.addListener(this, &PropertiesPanel::onAmbientReset);
+    mirrorYaw.addListener(this, &PropertiesPanel::onMirrorYawChanged);
 }
 
 void PropertiesPanel::setPosition(float x, float y) {
@@ -79,15 +75,14 @@ void PropertiesPanel::draw() {
     if (visRot) drawGroup(rotGui);
     if (visScale) drawGroup(sizeGui);
     drawGroup(curvatureGui); // always visible
-    if (visCrop) drawGroup(cropGui);
+    if (multiMode && multiCount == 2) drawGroup(gapGui);
 }
 
-void PropertiesPanel::updateGroupVisibility(bool ambient, bool pos, bool rot, bool scale, bool crop) {
+void PropertiesPanel::updateGroupVisibility(bool ambient, bool pos, bool rot, bool scale) {
     visAmbient = ambient;
     visPos = pos;
     visRot = rot;
     visScale = scale;
-    visCrop = crop;
 }
 
 void PropertiesPanel::setTarget(ScreenObject* t) {
@@ -139,6 +134,18 @@ void PropertiesPanel::setMultipleTargets(const std::vector<ScreenObject*>& targe
         heightParam = preferences->oglToDisplay(avgH);
     }
     curvatureParam = avgCurv;
+
+    // Compute gap between 2 slices (edge-to-edge distance along X)
+    if (multiCount == 2 && multiTargets[0] && multiTargets[1]) {
+        auto* a = multiTargets[0];
+        auto* b = multiTargets[1];
+        float halfA = a->getPlaneWidth() * a->getScale().x * 0.5f;
+        float halfB = b->getPlaneWidth() * b->getScale().x * 0.5f;
+        float centerDist = std::abs(a->getPosition().x - b->getPosition().x);
+        float gapOgl = std::max(0.0f, centerDist - halfA - halfB);
+        gapParam = preferences ? preferences->oglToDisplay(gapOgl) : gapOgl;
+    }
+
     syncing = false;
 
     captureLastValues();
@@ -168,12 +175,6 @@ void PropertiesPanel::syncFromTarget() {
 
     curvatureParam = target->getCurvature();
 
-    const ofRectangle& crop = target->getCropRect();
-    cropX = crop.x;
-    cropY = crop.y;
-    cropW = crop.width;
-    cropH = crop.height;
-
     syncing = false;
 }
 
@@ -193,7 +194,6 @@ void PropertiesPanel::syncToTarget() {
             1.0f));
     }
     target->setCurvature(curvatureParam);
-    target->setCropRect(ofRectangle(cropX, cropY, cropW, cropH));
 }
 
 void PropertiesPanel::onParamChanged(float& val) {
@@ -211,6 +211,7 @@ void PropertiesPanel::captureLastValues() {
     lastRot = glm::vec3(rotX, rotY, rotZ);
     lastSize = glm::vec2(widthParam, heightParam);
     lastCurvature = curvatureParam;
+    lastGap = gapParam;
 }
 
 void PropertiesPanel::syncToMultiTargets() {
@@ -221,26 +222,114 @@ void PropertiesPanel::syncToMultiTargets() {
     glm::vec2 deltaSize = glm::vec2(widthParam, heightParam) - lastSize;
     float deltaCurv = curvatureParam - lastCurvature;
 
-    for (auto* t : multiTargets) {
-        if (!t) continue;
-        t->setPosition(t->getPosition() + deltaPos);
-        t->setRotationEuler(t->getRotationEuler() + deltaRot);
-        if (preferences) {
-            glm::vec3 s = t->getScale();
-            float curEffW = t->getPlaneWidth() * s.x;
-            float curEffH = t->getPlaneHeight() * s.y;
-            float newEffW = curEffW + preferences->displayToOgl(deltaSize.x);
-            float newEffH = curEffH + preferences->displayToOgl(deltaSize.y);
-            float newSx = (t->getPlaneWidth() > 0) ? newEffW / t->getPlaneWidth() : s.x;
-            float newSy = (t->getPlaneHeight() > 0) ? newEffH / t->getPlaneHeight() : s.y;
-            t->setScale(glm::vec3(
-                std::max(0.01f, newSx),
-                std::max(0.01f, newSy),
-                1.0f));
+    // Mirror Yaw: when enabled with exactly 2 screens, apply opposite yaw
+    bool doMirror = mirrorYaw && multiTargets.size() == 2
+                    && multiTargets[0] && multiTargets[1];
+
+    if (doMirror) {
+        // Determine left/right by X position, use index as tie-breaker
+        auto* screenA = multiTargets[0];
+        auto* screenB = multiTargets[1];
+        bool aIsLeft = (screenA->getPosition().x < screenB->getPosition().x - 0.1f)
+                    || (std::abs(screenA->getPosition().x - screenB->getPosition().x) <= 0.1f);
+
+        auto* left  = aIsLeft ? screenA : screenB;
+        auto* right = aIsLeft ? screenB : screenA;
+
+        // Left gets +deltaYaw, right gets -deltaYaw
+        left->setPosition(left->getPosition() + deltaPos);
+        right->setPosition(right->getPosition() + deltaPos);
+
+        left->setRotationEuler(left->getRotationEuler() +
+            glm::vec3(deltaRot.x, deltaRot.y, deltaRot.z));
+        right->setRotationEuler(right->getRotationEuler() +
+            glm::vec3(deltaRot.x, -deltaRot.y, deltaRot.z));
+
+        for (auto* t : {left, right}) {
+            if (preferences) {
+                glm::vec3 s = t->getScale();
+                float curEffW = t->getPlaneWidth() * s.x;
+                float curEffH = t->getPlaneHeight() * s.y;
+                float newEffW = curEffW + preferences->displayToOgl(deltaSize.x);
+                float newEffH = curEffH + preferences->displayToOgl(deltaSize.y);
+                float newSx = (t->getPlaneWidth() > 0) ? newEffW / t->getPlaneWidth() : s.x;
+                float newSy = (t->getPlaneHeight() > 0) ? newEffH / t->getPlaneHeight() : s.y;
+                t->setScale(glm::vec3(
+                    std::max(0.01f, newSx),
+                    std::max(0.01f, newSy),
+                    1.0f));
+            }
+            t->setCurvature(t->getCurvature() + deltaCurv);
         }
-        t->setCurvature(t->getCurvature() + deltaCurv);
+    } else {
+        for (auto* t : multiTargets) {
+            if (!t) continue;
+            t->setPosition(t->getPosition() + deltaPos);
+            t->setRotationEuler(t->getRotationEuler() + deltaRot);
+            if (preferences) {
+                glm::vec3 s = t->getScale();
+                float curEffW = t->getPlaneWidth() * s.x;
+                float curEffH = t->getPlaneHeight() * s.y;
+                float newEffW = curEffW + preferences->displayToOgl(deltaSize.x);
+                float newEffH = curEffH + preferences->displayToOgl(deltaSize.y);
+                float newSx = (t->getPlaneWidth() > 0) ? newEffW / t->getPlaneWidth() : s.x;
+                float newSy = (t->getPlaneHeight() > 0) ? newEffH / t->getPlaneHeight() : s.y;
+                t->setScale(glm::vec3(
+                    std::max(0.01f, newSx),
+                    std::max(0.01f, newSy),
+                    1.0f));
+            }
+            t->setCurvature(t->getCurvature() + deltaCurv);
+        }
     }
 
+    // Gap: adjust horizontal spacing between 2 slices symmetrically
+    float deltaGap = gapParam - lastGap;
+    if (std::abs(deltaGap) > 0.001f && multiTargets.size() == 2
+        && multiTargets[0] && multiTargets[1]) {
+        float deltaOgl = preferences ? preferences->displayToOgl(deltaGap) : deltaGap;
+        auto* a = multiTargets[0];
+        auto* b = multiTargets[1];
+        // Move apart (or together) along X, each by half the delta
+        float sign = (a->getPosition().x <= b->getPosition().x) ? -1.0f : 1.0f;
+        a->setPosition(a->getPosition() + glm::vec3(sign * deltaOgl * 0.5f, 0, 0));
+        b->setPosition(b->getPosition() + glm::vec3(-sign * deltaOgl * 0.5f, 0, 0));
+    }
+
+    captureLastValues();
+}
+
+void PropertiesPanel::onMirrorYawChanged(bool& val) {
+    if (syncing) return;
+    if (!val) return; // only act when toggling ON
+    if (!multiMode || multiTargets.size() != 2) return;
+    if (!multiTargets[0] || !multiTargets[1]) return;
+
+    if (onPropertyChanged) onPropertyChanged();
+
+    // Get both screens' current yaw
+    auto* a = multiTargets[0];
+    auto* b = multiTargets[1];
+
+    // Determine which is left and which is right
+    auto* left  = (a->getPosition().x <= b->getPosition().x) ? a : b;
+    auto* right = (a->getPosition().x <= b->getPosition().x) ? b : a;
+
+    // Average the absolute yaw and apply symmetrically
+    float avgYaw = (std::abs(left->getRotationEuler().y) +
+                    std::abs(right->getRotationEuler().y)) * 0.5f;
+
+    glm::vec3 leftRot = left->getRotationEuler();
+    glm::vec3 rightRot = right->getRotationEuler();
+    leftRot.y = avgYaw;
+    rightRot.y = -avgYaw;
+    left->setRotationEuler(leftRot);
+    right->setRotationEuler(rightRot);
+
+    // Update displayed values to average
+    syncing = true;
+    rotY = avgYaw;
+    syncing = false;
     captureLastValues();
 }
 
@@ -297,12 +386,6 @@ bool PropertiesPanel::handleRightClick(int x, int y) {
         if (tryEditParam(sizeGui, heightParam)) return true;
     }
     if (tryEditParam(curvatureGui, curvatureParam)) return true;
-    if (visCrop) {
-        if (tryEditParam(cropGui, cropX)) return true;
-        if (tryEditParam(cropGui, cropY)) return true;
-        if (tryEditParam(cropGui, cropW)) return true;
-        if (tryEditParam(cropGui, cropH)) return true;
-    }
 
     return false;
 }
@@ -322,6 +405,11 @@ void PropertiesPanel::refreshUnitLabels() {
     widthParam.setMax(maxVal);
     heightParam.setMin(minVal);
     heightParam.setMax(maxVal);
+
+    // Gap: 0 to 50m (5000 OGL) in display units
+    gapParam.setName("Gap" + suffix);
+    gapParam.setMin(0);
+    gapParam.setMax(preferences->oglToDisplay(5000.0f));
 
     syncing = false;
 

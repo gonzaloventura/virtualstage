@@ -47,6 +47,12 @@ public:
     std::string getBgImagePath() const;
     void setBgImagePath(const std::string& path);
 
+    // View mode chrome
+    bool getHideStatusBarInView() const;
+    void setHideStatusBarInView(bool v);
+    bool getHideTitleBarInView() const;
+    void setHideTitleBarInView(bool v);
+
     // Serialize to/from JSON string (for cloud sync)
     std::string toJsonString() const;
     void fromJsonString(const std::string& jsonStr);
@@ -58,6 +64,8 @@ private:
     ofColor bgGradientTop{60, 60, 80};
     ofColor bgGradientBottom{20, 20, 20};
     std::string bgImagePath;
+    bool hideStatusBarInView = false;
+    bool hideTitleBarInView = false;
     mutable std::mutex mtx;
 
     std::string getPrefsDir() const;   // ~/.virtualstage/

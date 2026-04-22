@@ -23,7 +23,7 @@ public:
     void setVisible(bool v) { visible = v; }
 
     // Group visibility (completely show/hide groups from panel)
-    void updateGroupVisibility(bool ambient, bool pos, bool rot, bool scale, bool crop);
+    void updateGroupVisibility(bool ambient, bool pos, bool rot, bool scale);
 
     // Preferences (unit conversion for width/height display)
     void setPreferences(Preferences* p) { preferences = p; }
@@ -31,6 +31,9 @@ public:
 
     // Ambient light (0-100, default 60)
     float getAmbientLight() const { return ambientLight; }
+
+    // Mirror yaw state (for gizmo sync)
+    bool isMirrorYaw() const { return mirrorYaw; }
 
     // Right-click on a slider to type a value. Returns true if handled.
     bool handleRightClick(int x, int y);
@@ -53,10 +56,8 @@ private:
 
     ofParameter<float> curvatureParam{"Curvature", 0, -180, 180};
 
-    ofParameter<float> cropX{"Crop X", 0, 0, 1};
-    ofParameter<float> cropY{"Crop Y", 0, 0, 1};
-    ofParameter<float> cropW{"Crop W", 1, 0, 1};
-    ofParameter<float> cropH{"Crop H", 1, 0, 1};
+    ofParameter<bool> mirrorYaw{"Mirror Yaw", false};
+    ofParameter<float> gapParam{"Gap (m)", 0, 0, 50};
 
     // Standalone GUI groups (drawn manually, not inside panel)
     ofxGuiGroup ambientGui;
@@ -64,7 +65,7 @@ private:
     ofxGuiGroup rotGui;
     ofxGuiGroup sizeGui;
     ofxGuiGroup curvatureGui;
-    ofxGuiGroup cropGui;
+    ofxGuiGroup gapGui;
 
     ofxLabel nameLabel;
     ofxLabel sourceLabel;
@@ -82,16 +83,17 @@ private:
     glm::vec3 lastRot;
     glm::vec2 lastSize;
     float lastCurvature = 0;
+    float lastGap = 0;
 
     // Group visibility flags
     bool visAmbient = false;
     bool visPos = true;
     bool visRot = true;
     bool visScale = true;
-    bool visCrop = true;
 
     void onParamChanged(float& val);
     void onAmbientReset(bool& val);
+    void onMirrorYawChanged(bool& val);
     void captureLastValues();
     void syncToMultiTargets();
 };

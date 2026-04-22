@@ -61,7 +61,7 @@ void SettingsModal::mousePressed(int x, int y) {
     float W = ofGetWidth();
     float H = ofGetHeight();
     float panelW = 360;
-    float panelH = 420;
+    float panelH = 500;
     float px = (W - panelW) / 2;
     float py = (H - panelH) / 2;
 
@@ -177,6 +177,28 @@ void SettingsModal::mousePressed(int x, int y) {
         }
     }
 
+    // --- View Mode checkboxes --- (must match draw() layout)
+    float viewSectionY = colorBtnsY + 70;
+    float cbY1 = viewSectionY + 10;
+    float cbY2 = cbY1 + 28;
+    float cbHitH = 22;
+    if (prefs) {
+        if (x >= radioX && x <= px + panelW - 30 &&
+            y >= cbY1 && y <= cbY1 + cbHitH) {
+            prefs->setHideStatusBarInView(!prefs->getHideStatusBarInView());
+            prefs->saveLocal();
+            if (onPreferenceChanged) onPreferenceChanged();
+            return;
+        }
+        if (x >= radioX && x <= px + panelW - 30 &&
+            y >= cbY2 && y <= cbY2 + cbHitH) {
+            prefs->setHideTitleBarInView(!prefs->getHideTitleBarInView());
+            prefs->saveLocal();
+            if (onPreferenceChanged) onPreferenceChanged();
+            return;
+        }
+    }
+
     // Click outside panel = close
     if (x < px || x > px + panelW || y < py || y > py + panelH) {
         hide();
@@ -213,7 +235,7 @@ void SettingsModal::draw() {
     float W = ofGetWidth();
     float H = ofGetHeight();
     float panelW = 360;
-    float panelH = 420;
+    float panelH = 500;
     float px = (W - panelW) / 2;
     float py = (H - panelH) / 2;
 
@@ -318,6 +340,48 @@ void SettingsModal::draw() {
                 ofDrawBitmapString(fname, radioX, colorBtnsY + 16);
             }
         }
+    }
+
+    // --- View Mode section ---
+    float viewSectionY = colorBtnsY + 70;
+    ofSetColor(60);
+    ofDrawLine(px + 15, viewSectionY - 8, px + panelW - 15, viewSectionY - 8);
+    ofSetColor(180);
+    ofDrawBitmapString("View Mode", px + 30, viewSectionY + 5);
+
+    float cbY1 = viewSectionY + 10;
+    float cbY2 = cbY1 + 28;
+    float cbSize = 14;
+    if (prefs) {
+        // Status bar checkbox
+        bool hideStatus = prefs->getHideStatusBarInView();
+        ofNoFill();
+        ofSetColor(hideStatus ? ofColor(0, 150, 255) : ofColor(100));
+        ofSetLineWidth(2);
+        ofDrawRectangle(radioX, cbY1 + 4, cbSize, cbSize);
+        ofFill();
+        ofSetLineWidth(1);
+        if (hideStatus) {
+            ofSetColor(0, 150, 255);
+            ofDrawRectangle(radioX + 3, cbY1 + 7, cbSize - 6, cbSize - 6);
+        }
+        ofSetColor(180);
+        ofDrawBitmapString("Hide status bar", radioX + cbSize + 10, cbY1 + 15);
+
+        // Title bar checkbox
+        bool hideTitle = prefs->getHideTitleBarInView();
+        ofNoFill();
+        ofSetColor(hideTitle ? ofColor(0, 150, 255) : ofColor(100));
+        ofSetLineWidth(2);
+        ofDrawRectangle(radioX, cbY2 + 4, cbSize, cbSize);
+        ofFill();
+        ofSetLineWidth(1);
+        if (hideTitle) {
+            ofSetColor(0, 150, 255);
+            ofDrawRectangle(radioX + 3, cbY2 + 7, cbSize - 6, cbSize - 6);
+        }
+        ofSetColor(180);
+        ofDrawBitmapString("Hide window title bar", radioX + cbSize + 10, cbY2 + 15);
     }
 
     // Close button (X) — top-right

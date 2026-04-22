@@ -1,22 +1,42 @@
 #pragma once
 #include "ofMain.h"
 #include "ScreenObject.h"
+#include "StageElement.h"
 #include <vector>
+
+// Lightweight wrapper so Gizmo can manipulate either type
+struct GizmoTarget {
+    enum Type { Screen, StageElem };
+    Type type;
+    union { ScreenObject* screen; StageElement* element; };
+
+    GizmoTarget() : type(Screen), screen(nullptr) {}
+    GizmoTarget(ScreenObject* s) : type(Screen), screen(s) {}
+    GizmoTarget(StageElement* e) : type(StageElem), element(e) {}
+
+    glm::vec3 getPosition() const;
+    void setPosition(const glm::vec3& p);
+    glm::vec3 getRotationEuler() const;
+    void setRotationEuler(const glm::vec3& e);
+    glm::vec3 getScale() const;
+    void setScale(const glm::vec3& s);
+    float getHalfWidth() const;
+    float getHalfHeight() const;
+};
 
 class Gizmo {
 public:
     enum class Mode { Translate, Rotate, Scale };
     enum class Axis { None, X, Y, Z };
 
-    void draw(const ScreenObject& target, const ofCamera& cam);
+    void draw(const glm::vec3& targetPos, const ofCamera& cam);
 
-    // Returns true if mouse hits a gizmo handle
     bool hitTest(const ofCamera& cam, const glm::vec2& screenPos,
-                 const ScreenObject& target);
+                 const glm::vec3& targetPos);
 
     void beginDrag(const glm::vec2& screenPos, const ofCamera& cam,
-                   const ScreenObject& primary,
-                   const std::vector<ScreenObject*>& allTargets);
+                   const GizmoTarget& primary,
+                   const std::vector<GizmoTarget>& allTargets);
     void updateDrag(const glm::vec2& screenPos, const ofCamera& cam);
     void endDrag();
 
@@ -24,7 +44,7 @@ public:
     Axis getActiveAxis() const { return activeAxis; }
 
     Mode mode = Mode::Translate;
-    bool mirrorYaw = false; // when true + 2 targets, Y-rotation is mirrored
+    bool mirrorYaw = false;
 
     // Snap to grid
     bool snapEnabled = false;
@@ -32,10 +52,8 @@ public:
 
     // Snap to edges
     bool edgeSnapEnabled = true;
-    float edgeSnapThreshold = 15.0f; // world units
-    // Set all screens for edge-snap reference (call before drag)
+    float edgeSnapThreshold = 15.0f;
     void setEdgeSnapScreens(const std::vector<std::unique_ptr<ScreenObject>>* allScreens);
-    // Active snap lines for visual feedback (populated during updateDrag)
     struct SnapLine { glm::vec3 a, b; };
     std::vector<SnapLine> activeSnapLines;
 
@@ -55,7 +73,7 @@ private:
     glm::vec2 dragStart;
 
     struct DragStartState {
-        ScreenObject* target;
+        GizmoTarget target;
         glm::vec3 startPos;
         glm::vec3 startRot;
         glm::vec3 startScale;
