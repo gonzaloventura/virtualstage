@@ -55,11 +55,6 @@ void Scene::draw(bool viewMode) {
         }
     }
 
-    // Draw stage elements
-    for (int i = 0; i < (int)stageElements.size(); i++) {
-        stageElements[i]->draw(i == selectedStageElement);
-    }
-
     light.disable();
     ofDisableLighting();
 }
@@ -358,83 +353,6 @@ void Scene::pollSpoutSenders() {
 }
 #endif
 
-// --- Stage Element Management ---
-
-int Scene::addStageElement(StageElementType type, const std::string& name) {
-    auto elem = std::make_unique<StageElement>(type, name);
-    stageElements.push_back(std::move(elem));
-    return (int)stageElements.size() - 1;
-}
-
-void Scene::removeStageElement(int index) {
-    if (index >= 0 && index < (int)stageElements.size()) {
-        stageElements.erase(stageElements.begin() + index);
-        if (selectedStageElement == index) selectedStageElement = -1;
-        else if (selectedStageElement > index) selectedStageElement--;
-    }
-}
-
-StageElement* Scene::getStageElement(int index) {
-    if (index >= 0 && index < (int)stageElements.size()) {
-        return stageElements[index].get();
-    }
-    return nullptr;
-}
-
-int Scene::getStageElementCount() const {
-    return (int)stageElements.size();
-}
-
-int Scene::pickStageElement(const ofCamera& cam, const glm::vec2& screenPos) {
-    glm::vec3 nearPoint = cam.screenToWorld(glm::vec3(screenPos.x, screenPos.y, 0.0f));
-    glm::vec3 farPoint = cam.screenToWorld(glm::vec3(screenPos.x, screenPos.y, 1.0f));
-    glm::vec3 rayDir = glm::normalize(farPoint - nearPoint);
-    glm::vec3 rayOrigin = nearPoint;
-
-    int closestIndex = -1;
-    float closestT = std::numeric_limits<float>::max();
-
-    for (int i = 0; i < (int)stageElements.size(); i++) {
-        float t;
-        if (rayIntersectsAABB(rayOrigin, rayDir, *stageElements[i], t)) {
-            if (t < closestT) {
-                closestT = t;
-                closestIndex = i;
-            }
-        }
-    }
-    return closestIndex;
-}
-
-bool Scene::rayIntersectsAABB(const glm::vec3& rayOrigin, const glm::vec3& rayDir,
-                               const StageElement& elem, float& t) {
-    glm::mat4 inv = glm::inverse(elem.getGlobalTransformMatrix());
-    glm::vec3 localOrigin = glm::vec3(inv * glm::vec4(rayOrigin, 1.0f));
-    glm::vec3 localDir = glm::normalize(glm::vec3(inv * glm::vec4(rayDir, 0.0f)));
-
-    // AABB in local space: [-w/2, w/2] x [0, h] x [-d/2, d/2]
-    glm::vec3 bmin(-elem.width * 0.5f, 0, -elem.depth * 0.5f);
-    glm::vec3 bmax(elem.width * 0.5f, elem.height, elem.depth * 0.5f);
-
-    // Slab intersection test
-    float tmin = -1e9f, tmax = 1e9f;
-    for (int i = 0; i < 3; i++) {
-        if (std::abs(localDir[i]) < 1e-8f) {
-            if (localOrigin[i] < bmin[i] || localOrigin[i] > bmax[i]) return false;
-        } else {
-            float t1 = (bmin[i] - localOrigin[i]) / localDir[i];
-            float t2 = (bmax[i] - localOrigin[i]) / localDir[i];
-            if (t1 > t2) std::swap(t1, t2);
-            tmin = std::max(tmin, t1);
-            tmax = std::min(tmax, t2);
-            if (tmin > tmax) return false;
-        }
-    }
-    if (tmax < 0) return false;
-    t = (tmin >= 0) ? tmin : tmax;
-    return true;
-}
-
 // --- Project Save/Load ---
 
 bool Scene::saveProject(const std::string& path, const ofJson& cameraJson) const {
@@ -466,15 +384,6 @@ bool Scene::saveProject(const std::string& path, const ofJson& cameraJson) const
     }
     root["groups"] = groupsArr;
 
-    // Serialize stage elements
-    if (!stageElements.empty()) {
-        ofJson elemArr = ofJson::array();
-        for (const auto& e : stageElements) {
-            elemArr.push_back(e->toJson());
-        }
-        root["stageElements"] = elemArr;
-    }
-
     return ofSavePrettyJson(path, root);
 }
 
@@ -488,8 +397,6 @@ bool Scene::loadProject(const std::string& path, ofJson* outCameraJson) {
     // Clear existing state
     screens.clear();
     groups.clear();
-    stageElements.clear();
-    selectedStageElement = -1;
     clearSelection();
     nextScreenId = 1;
     nextGroupId = 1;
@@ -536,20 +443,10 @@ bool Scene::loadProject(const std::string& path, ofJson* outCameraJson) {
         return false;
     }
 
-    // Load stage elements if present
-    if (root.contains("stageElements") && root["stageElements"].is_array()) {
-        for (auto& ej : root["stageElements"]) {
-            auto elem = std::make_unique<StageElement>();
-            elem->fromJson(ej);
-            stageElements.push_back(std::move(elem));
-        }
-    }
-
     reconnectSources();
 
     ofLogNotice("Scene") << "Loaded project: " << groups.size() << " screens, "
-                         << screens.size() << " slices, "
-                         << stageElements.size() << " stage elements from " << path;
+                         << screens.size() << " slices from " << path;
     return true;
 }
 
@@ -580,14 +477,6 @@ bool Scene::exportPreset(const std::string& path) const {
     }
     root["groups"] = groupsArr;
 
-    if (!stageElements.empty()) {
-        ofJson elemArr = ofJson::array();
-        for (const auto& e : stageElements) {
-            elemArr.push_back(e->toJson());
-        }
-        root["stageElements"] = elemArr;
-    }
-
     return ofSavePrettyJson(path, root);
 }
 
@@ -601,8 +490,6 @@ bool Scene::importPreset(const std::string& path) {
     // Clear existing state
     screens.clear();
     groups.clear();
-    stageElements.clear();
-    selectedStageElement = -1;
     clearSelection();
     nextScreenId = 1;
     nextGroupId = 1;
@@ -625,14 +512,6 @@ bool Scene::importPreset(const std::string& path) {
                 }
             }
             groups.push_back(g);
-        }
-    }
-
-    if (root.contains("stageElements") && root["stageElements"].is_array()) {
-        for (auto& ej : root["stageElements"]) {
-            auto elem = std::make_unique<StageElement>();
-            elem->fromJson(ej);
-            stageElements.push_back(std::move(elem));
         }
     }
 

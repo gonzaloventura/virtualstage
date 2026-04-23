@@ -16,15 +16,10 @@ struct SceneSnapshot {
         int sourceIndex;
         std::string sourceName;
     };
-    struct ElementData {
-        ofJson json;           // full stage element state via toJson()
-    };
     std::vector<ScreenData> screens;
     std::vector<GroupData> groups;
-    std::vector<ElementData> elements;
     std::set<int> selectedIndices;
     int primarySelected = -1;
-    int selectedStageElement = -1;
     std::string description;
 };
 

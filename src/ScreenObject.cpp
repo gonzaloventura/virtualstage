@@ -44,6 +44,17 @@ float ScreenObject::getCurvature() const {
     return curvature;
 }
 
+void ScreenObject::setCurveExtent(float pct) {
+    pct = ofClamp(pct, 0, 100);
+    if (std::abs(curveExtent - pct) < 0.01f) return;
+    curveExtent = pct;
+    rebuildMesh();
+}
+
+float ScreenObject::getCurveExtent() const {
+    return curveExtent;
+}
+
 // --- Crop ---
 
 void ScreenObject::setCropRect(const ofRectangle& r) {
@@ -89,6 +100,9 @@ ofJson ScreenObject::toJson() const {
     j["scale"] = {sc.x, sc.y, sc.z};
 
     j["curvature"] = curvature;
+    if (std::abs(curveExtent - 100.0f) > 0.01f) {
+        j["curveExtent"] = curveExtent;
+    }
 
     j["crop"] = {
         {"x", cropRect.x},
@@ -99,6 +113,14 @@ ofJson ScreenObject::toJson() const {
 
     if (!sourceName.empty()) {
         j["sourceName"] = sourceName;
+    }
+
+    if (!cabinetId.empty()) {
+        j["cabinetId"] = cabinetId;
+    }
+    if (sourcePxWidth > 0 && sourcePxHeight > 0) {
+        j["sourcePxWidth"]  = sourcePxWidth;
+        j["sourcePxHeight"] = sourcePxHeight;
     }
 
     if (!maskPoints.empty()) {
@@ -132,6 +154,7 @@ void ScreenObject::fromJson(const ofJson& j) {
         setScale(glm::vec3(j["scale"][0], j["scale"][1], j["scale"][2]));
     }
 
+    setCurveExtent(j.value("curveExtent", 100.0f));
     setCurvature(j.value("curvature", 0.0f));
 
     if (j.contains("crop")) {
@@ -147,6 +170,10 @@ void ScreenObject::fromJson(const ofJson& j) {
     if (j.contains("sourceName")) {
         sourceName = j["sourceName"].get<std::string>();
     }
+
+    cabinetId      = j.value("cabinetId", std::string(""));
+    sourcePxWidth  = j.value("sourcePxWidth",  0);
+    sourcePxHeight = j.value("sourcePxHeight", 0);
 
     if (j.contains("mask") && j["mask"].is_array()) {
         std::vector<glm::vec2> pts;
@@ -216,6 +243,11 @@ void ScreenObject::rebuildMesh() {
     int cols = meshColumns;
     int rows = meshRows;
 
+    // Curve extent (0-100%): WHERE the bend/fold happens along the width
+    // 50% = bend in the middle, 80% = bend near the right edge
+    // At 100%: smooth arc across entire width (original behavior)
+    float bendPos = ofClamp(curveExtent, 0, 100) / 100.0f; // 0..1
+
     // Generate vertices
     for (int j = 0; j <= rows; j++) {
         float s = (float)j / rows;  // 0 to 1
@@ -225,11 +257,39 @@ void ScreenObject::rebuildMesh() {
             float t = (float)i / cols;  // 0 to 1
 
             float x, z;
+            glm::vec3 normal(0, 0, 1);
+
             if (absCurv > 0.1f) {
-                float radius = (w / 2.0f) / sin(totalAngle / 2.0f);
-                float angle = (t - 0.5f) * totalAngle;
-                x = radius * sin(angle);
-                z = sign * radius * (cos(angle) - cos(totalAngle / 2.0f));
+                if (bendPos > 0.99f) {
+                    // Full smooth arc (extent ~100%): original behavior
+                    float radius = (w / 2.0f) / sin(totalAngle / 2.0f);
+                    float angle = (t - 0.5f) * totalAngle;
+                    x = radius * sin(angle);
+                    z = sign * radius * (cos(angle) - cos(totalAngle / 2.0f));
+                    normal = glm::normalize(glm::vec3(sin(angle), 0, sign * cos(angle)));
+                } else {
+                    // Fold mode: flat-left | bend point | flat-right (rotated)
+                    float halfW = w * 0.5f;
+                    float leftW = w * bendPos;   // width of left flat section
+                    float rightW = w - leftW;    // width of right flat section
+                    float bendX = -halfW + leftW; // X position of the bend
+
+                    if (t <= bendPos || bendPos < 0.01f) {
+                        // Left flat section (or all flat if bendPos~0)
+                        float frac = (bendPos > 0.001f) ? (t / bendPos) : t;
+                        x = -halfW + frac * leftW;
+                        z = 0;
+                    } else {
+                        // Right section: continues flat but rotated by curvature angle
+                        float frac = (t - bendPos) / (1.0f - bendPos); // 0..1
+                        float dist = frac * rightW;
+                        x = bendX + dist * cos(totalAngle);
+                        z = sign * dist * sin(totalAngle);
+                        // Normal rotated by the bend angle
+                        normal = glm::normalize(glm::vec3(
+                            -sign * sin(totalAngle), 0, cos(totalAngle)));
+                    }
+                }
             } else {
                 x = (t - 0.5f) * w;
                 z = 0;
@@ -237,21 +297,12 @@ void ScreenObject::rebuildMesh() {
 
             curvedMesh.addVertex(glm::vec3(x, y, z));
 
-            // Tex coords: placeholder (updated before draw with actual texture size)
-            // Use (1-s) because j=0 is bottom (y=-h/2) and V=0 should be top
+            // Tex coords
             float texU = cropRect.x + t * cropRect.width;
             float texV = cropRect.y + (1.0f - s) * cropRect.height;
             curvedMesh.addTexCoord(glm::vec2(texU, texV));
 
-            // Normal: pointing outward from arc
-            if (absCurv > 0.1f) {
-                float radius = (w / 2.0f) / sin(totalAngle / 2.0f);
-                float angle = (t - 0.5f) * totalAngle;
-                glm::vec3 normal = glm::normalize(glm::vec3(sin(angle), 0, sign * cos(angle)));
-                curvedMesh.addNormal(normal);
-            } else {
-                curvedMesh.addNormal(glm::vec3(0, 0, 1));
-            }
+            curvedMesh.addNormal(normal);
         }
     }
 

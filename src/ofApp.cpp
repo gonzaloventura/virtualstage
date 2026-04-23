@@ -7,12 +7,22 @@
 #endif
 #include "ofXml.h"
 #include <thread>
+#include <sys/stat.h>
 #ifdef TARGET_OSX
 #include <unistd.h>
 #endif
 #include <mutex>
 
+// Global pointer for GLFW close callback
+static ofApp* g_appInstance = nullptr;
+
+static void glfwCloseCallback(GLFWwindow* window) {
+    glfwSetWindowShouldClose(window, GLFW_FALSE);
+    if (g_appInstance) g_appInstance->requestQuit();
+}
+
 void ofApp::setup() {
+    g_appInstance = this;
     ofSetEscapeQuitsApp(false);
     ofSetFrameRate(60);
     ofSetVerticalSync(true);
@@ -44,6 +54,12 @@ void ofApp::setup() {
     // Cursors
     handCursor = glfwCreateStandardCursor(GLFW_RESIZE_ALL_CURSOR);
     crosshairCursor = glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR);
+
+    // Intercept window close to show quit confirmation
+    auto* win = dynamic_cast<ofAppGLFWWindow*>(ofGetWindowPtr());
+    if (win) {
+        glfwSetWindowCloseCallback(win->getGLFWWindow(), glfwCloseCallback);
+    }
 
     // Push initial undo state
     undoManager.pushState(scene);
@@ -102,6 +118,38 @@ void ofApp::setup() {
             }).detach();
         }
     };
+
+    // ── Cabinets library setup ───────────────────────────────────────────────
+    cabinetLibrary.loadLocal();
+    cabinetsModal.onLibraryChanged = [this]() {
+        cabinetLibrary.saveLocal();
+        autoAssignCabinets();
+        // Sync to cloud in background (skips silently if not authenticated)
+        if (authManager.isAuthenticated()) {
+            std::string jsonStr = cabinetLibrary.toJsonString();
+            std::thread([this, jsonStr]() {
+                std::string err;
+                cloudStorage.saveCabinets(authManager.getSession(), jsonStr, err);
+            }).detach();
+        }
+    };
+    // Fetch cabinets from cloud if logged in (background, overwrites local on success)
+    if (authManager.isAuthenticated()) {
+        std::thread([this]() {
+            std::string err, cloudData;
+            if (cloudStorage.loadCabinets(authManager.getSession(), cloudData, err)) {
+                if (!cloudData.empty()) {
+                    cabinetLibrary.fromJsonString(cloudData);
+                    cabinetLibrary.saveLocal();
+                }
+            }
+        }).detach();
+    }
+
+    // ── Auto-check for updates on startup (silent — only shows if update available) ──
+    if (preferences.getCheckForUpdatesOnStart()) {
+        checkForUpdates(true);
+    }
 }
 
 void ofApp::update() {
@@ -203,6 +251,7 @@ void ofApp::update() {
                     }
                     undoManager.clear();
                     pushUndo();
+                    lastSavedUndoIndex = 0;
                     propertiesPanel.setTarget(nullptr);
                     scene.clearSelection();
                 }
@@ -266,9 +315,6 @@ void ofApp::draw() {
         if (scene.getPrimarySelected() >= 0) {
             auto* scr = scene.getScreen(scene.getPrimarySelected());
             if (scr) { gizmoPos = scr->getPosition(); hasGizmoTarget = true; }
-        } else if (scene.selectedStageElement >= 0) {
-            auto* elem = scene.getStageElement(scene.selectedStageElement);
-            if (elem) { gizmoPos = elem->getPosition(); hasGizmoTarget = true; }
         }
 
         if (hasGizmoTarget) {
@@ -351,9 +397,17 @@ void ofApp::draw() {
     if (settingsModal.isVisible()) {
         settingsModal.draw();
     }
+    // Cabinets modal
+    if (cabinetsModal.isVisible()) {
+        cabinetsModal.draw();
+    }
     // Auth modal — topmost, blocks all interaction underneath
     if (authModal.isVisible()) {
         authModal.draw();
+    }
+    // Quit confirmation — drawn above everything
+    if (showQuitDialog) {
+        drawQuitDialog();
     }
 }
 
@@ -378,9 +432,7 @@ void ofApp::drawServerList() {
         }
     }
     if (scene.groups.empty()) contentH += rowH;
-    contentH += 48; // gap (12) + separator + gap (8) + STAGE header (28)
-    contentH += std::max(scene.getStageElementCount(), 1) * rowH;
-    contentH += 48; // gap (20) + separator line + gap (8) + SERVERS header (28)
+    contentH += 28; // gap (20) + separator line + gap (8) + SERVERS header (28)
     contentH += std::max((int)servers.size(), 1) * rowH;
     contentH += 10; // bottom padding
     sidebarContentHeight = contentH;
@@ -505,105 +557,6 @@ void ofApp::drawServerList() {
     if (scene.groups.empty()) {
         ofSetColor(100);
         ofDrawBitmapString("No screens", panelX + 10, curY + 15);
-        curY += rowH;
-    }
-
-    // --- STAGE section ---
-    curY += 12;
-    ofSetColor(60);
-    ofDrawLine(panelX + 10, curY, panelX + serverListWidth - 10, curY);
-    curY += 8;
-    ofSetColor(200);
-    ofDrawBitmapString("STAGE", panelX + 10, curY + 18);
-
-    // [+] button
-    {
-        float btnSize = 16;
-        float btnX = serverListWidth - btnSize - 8;
-        float btnY = curY + 3;
-        bool btnHov = (mouseX >= btnX && mouseX <= btnX + btnSize &&
-                       mouseY >= btnY && mouseY <= btnY + btnSize &&
-                       mouseY >= panelY && mouseY < panelY + panelH);
-        ofSetColor(btnHov ? ofColor(0, 200, 150) : ofColor(120));
-        ofNoFill();
-        ofDrawRectangle(btnX, btnY, btnSize, btnSize);
-        ofFill();
-        // Plus sign
-        ofDrawLine(btnX + 4, btnY + btnSize / 2, btnX + btnSize - 4, btnY + btnSize / 2);
-        ofDrawLine(btnX + btnSize / 2, btnY + 4, btnX + btnSize / 2, btnY + btnSize - 4);
-    }
-
-    curY += 28;
-
-    // Stage add dropdown
-    if (stageAddMenuOpen) {
-        float ddX = serverListWidth - 110;
-        float ddY = stageAddMenuY;
-        float ddW = 100;
-        float itemH = 22;
-        std::string items[] = {"Floor", "Truss", "Layher"};
-        int numItems = 3;
-
-        // Background
-        ofSetColor(40, 40, 50, 240);
-        ofDrawRectangle(ddX, ddY, ddW, itemH * numItems + 4);
-
-        for (int i = 0; i < numItems; i++) {
-            float iy = ddY + 2 + i * itemH;
-            bool hov = (mouseX >= ddX && mouseX <= ddX + ddW &&
-                        mouseY >= iy && mouseY < iy + itemH);
-            if (hov) {
-                ofSetColor(0, 150, 120, 100);
-                ofDrawRectangle(ddX + 1, iy, ddW - 2, itemH);
-            }
-            ofSetColor(220);
-            ofDrawBitmapString(items[i], ddX + 10, iy + 15);
-        }
-    }
-
-    for (int ei = 0; ei < scene.getStageElementCount(); ei++) {
-        auto* elem = scene.getStageElement(ei);
-        if (!elem) continue;
-
-        float elemTop = curY;
-        bool elemSelected = (scene.selectedStageElement == ei);
-        bool elemHovered = (mouseX >= panelX && mouseX < serverListWidth &&
-                            mouseY >= elemTop && mouseY < elemTop + rowH &&
-                            mouseY >= panelY && mouseY < panelY + panelH);
-
-        if (elemSelected) {
-            ofSetColor(0, 180, 100, 60);
-            ofDrawRectangle(panelX, elemTop, serverListWidth, rowH);
-        } else if (elemHovered) {
-            ofSetColor(255, 255, 255, 20);
-            ofDrawRectangle(panelX, elemTop, serverListWidth, rowH);
-        }
-
-        ofSetColor(elemSelected ? ofColor(0, 200, 150) : ofColor(160));
-        std::string eLabel = elem->name;
-        int maxCharsE = (int)((serverListWidth - 50) / 8);
-        if ((int)eLabel.length() > maxCharsE) eLabel = eLabel.substr(0, maxCharsE - 3) + "...";
-        ofDrawBitmapString(eLabel, panelX + 10, elemTop + 15);
-
-        // Delete [X]
-        float exBtnX = serverListWidth - xBtnSize - 8;
-        float exBtnY = elemTop + (rowH - xBtnSize) / 2;
-        bool exHovered = (mouseX >= exBtnX && mouseX <= exBtnX + xBtnSize &&
-                          mouseY >= exBtnY && mouseY <= exBtnY + xBtnSize &&
-                          mouseY >= panelY && mouseY < panelY + panelH);
-        ofSetColor(exHovered ? ofColor(255, 80, 80) : ofColor(80));
-        ofNoFill();
-        ofDrawRectangle(exBtnX, exBtnY, xBtnSize, xBtnSize);
-        ofFill();
-        ofDrawLine(exBtnX + 4, exBtnY + 4, exBtnX + xBtnSize - 4, exBtnY + xBtnSize - 4);
-        ofDrawLine(exBtnX + xBtnSize - 4, exBtnY + 4, exBtnX + 4, exBtnY + xBtnSize - 4);
-
-        curY += rowH;
-    }
-
-    if (scene.getStageElementCount() == 0) {
-        ofSetColor(100);
-        ofDrawBitmapString("No elements", panelX + 10, curY + 15);
         curY += rowH;
     }
 
@@ -862,73 +815,6 @@ bool ofApp::handleSidebarClick(int x, int y) {
 
     if (scene.groups.empty()) curY += rowH;
 
-    // --- STAGE section ---
-    curY += 12 + 8; // gap + separator
-
-    // [+] button click (in header row)
-    {
-        float btnSize = 16;
-        float btnX = serverListWidth - btnSize - 8;
-        float btnY = curY + 3;
-        if (x >= btnX && x <= btnX + btnSize && y >= btnY && y <= btnY + btnSize) {
-            stageAddMenuOpen = !stageAddMenuOpen;
-            stageAddMenuY = curY + 26;
-            return true;
-        }
-    }
-
-    // Stage add dropdown click
-    if (stageAddMenuOpen) {
-        float ddX = serverListWidth - 110;
-        float ddY = stageAddMenuY;
-        float ddW = 100;
-        float itemH2 = 22;
-        int numItems = 3;
-
-        if (x >= ddX && x <= ddX + ddW && y >= ddY && y < ddY + itemH2 * numItems + 4) {
-            int idx = (int)((y - ddY - 2) / itemH2);
-            if (idx >= 0 && idx < numItems) {
-                pushUndo();
-                StageElementType types[] = {StageElementType::Floor, StageElementType::Truss, StageElementType::Layher};
-                int ni = scene.addStageElement(types[idx]);
-                scene.selectedStageElement = ni;
-                scene.clearSelection();
-                selectedGroupId = -1;
-            }
-            stageAddMenuOpen = false;
-            return true;
-        }
-        // Click outside dropdown closes it
-        stageAddMenuOpen = false;
-    }
-
-    curY += 28; // STAGE header height
-
-    for (int ei = 0; ei < scene.getStageElementCount(); ei++) {
-        float elemTop = curY;
-        if (y >= elemTop && y < elemTop + rowH) {
-            // Delete [X] button
-            float xBtnX2 = serverListWidth - xBtnSize - 8;
-            float xBtnY2 = elemTop + (rowH - xBtnSize) / 2;
-            if (x >= xBtnX2 && x <= xBtnX2 + xBtnSize &&
-                y >= xBtnY2 && y <= xBtnY2 + xBtnSize) {
-                pushUndo();
-                scene.removeStageElement(ei);
-                return true;
-            }
-
-            // Select stage element
-            scene.clearSelection();
-            selectedGroupId = -1;
-            scene.selectedStageElement = ei;
-            propertiesPanel.setTarget(nullptr);
-            return true;
-        }
-        curY += rowH;
-    }
-
-    if (scene.getStageElementCount() == 0) curY += rowH;
-
     // Gap + separator + SERVERS header
     curY += 20 + 8 + 28;
 
@@ -962,7 +848,7 @@ bool ofApp::handleSidebarClick(int x, int y) {
 
 void ofApp::mouseScrolled(int x, int y, float scrollX, float scrollY) {
     if (authModal.isVisible() || cloudLoadState != CloudLoadState::Hidden) return;
-    if (settingsModal.isVisible()) return;
+    if (settingsModal.isVisible() || cabinetsModal.isVisible()) return;
 
     // Scroll sidebar when mouse is over it — consume event so camera doesn't zoom
     if (appMode == AppMode::Designer && showUI &&
@@ -1254,9 +1140,11 @@ void ofApp::drawMenuBar() {
             {"",                  "",             true,  false, false},
             {"Export Layout",     "",             false, false, false},
             {"Import Layout",     "",             false, false, false},
+            {"Export Image...",   "",             false, false, false},
             {"",                  "",             true,  false, false},
             {"Autosave (15s)",    "",             false, true,  autosaveEnabled},
             {"Preferences...",    "",             false, false, false},
+            {"Cabinets...",       "",             false, false, false},
             {"",                  "",             true,  false, false},
             {userLabel,           "",             false, false, false},
             {"Log Out",           "",             false, false, false},
@@ -1281,8 +1169,10 @@ void ofApp::drawMenuBar() {
     // Link dropdown
     if (linkMenuOpen) {
         std::vector<std::tuple<std::string, std::string, bool, bool, bool>> items = {
-            {"Input",  "L L I", false, false, false},
-            {"Output", "L L O", false, false, false},
+            {"Input",       "L L I", false, false, false},
+            {"Output",      "L L O", false, false, false},
+            {"",            "",      true,  false, false},
+            {"Import XML...", "",    false, false, false},
         };
         drawDropdown(linkX - 5, menuBarHeight, 180, items);
     }
@@ -1350,13 +1240,13 @@ bool ofApp::handleMenuClick(int x, int y) {
     }
 
     // File dropdown clicks
-    // Items (17 total): 0=New, 1=Open, 2=Save, 3=SaveAs, 4=SaveCloud, 5=LoadCloud,
-    //   6=sep, 7=ExportLayout, 8=ImportLayout, 9=sep,
-    //   10=Autosave, 11=Preferences, 12=sep, 13=UserEmail, 14=LogOut, 15=sep, 16=Quit
+    // Items (19 total): 0=New, 1=Open, 2=Save, 3=SaveAs, 4=SaveCloud, 5=LoadCloud,
+    //   6=sep, 7=ExportLayout, 8=ImportLayout, 9=ExportImage, 10=sep,
+    //   11=Autosave, 12=Preferences, 13=Cabinets, 14=sep, 15=UserEmail, 16=LogOut, 17=sep, 18=Quit
     if (fileMenuOpen) {
         float dropX = fileX - 5, dropW = 240;
-        bool isSep[] = {false,false,false,false,false,false,true,false,false,true,false,false,true,false,false,true,false};
-        int total = 17;
+        bool isSep[] = {false,false,false,false,false,false,true,false,false,false,true,false,false,false,true,false,false,true,false};
+        int total = 19;
         float iy = menuBarHeight;
 
         if (x >= dropX && x <= dropX + dropW) {
@@ -1389,7 +1279,10 @@ bool ofApp::handleMenuClick(int x, int y) {
                             }
                             break;
                         }
-                        case 10: // Autosave toggle
+                        case 9: // Export Image
+                            exportRender();
+                            break;
+                        case 11: // Autosave toggle
                             if (!autosaveEnabled && currentProjectPath.empty() && currentCloudProjectName.empty()) {
                                 std::string cloudName = ofSystemTextBoxDialog(
                                     "Enter a name to save to Cloud (free)\nor cancel for local save:", "");
@@ -1404,16 +1297,19 @@ bool ofApp::handleMenuClick(int x, int y) {
                             autosaveEnabled = !autosaveEnabled;
                             autosaveTimer = 0;
                             break;
-                        case 11: // Preferences
+                        case 12: // Preferences
                             settingsModal.show(&preferences);
                             break;
-                        case 13: break; // User email — display only, no action
-                        case 14: // Log Out
+                        case 13: // Cabinets
+                            cabinetsModal.show(&cabinetLibrary);
+                            break;
+                        case 15: break; // User email — display only, no action
+                        case 16: // Log Out
                             authManager.logout();
                             authModal.show();
                             cam.disableMouseInput();
                             break;
-                        case 16: ofExit(); break;
+                        case 18: requestQuit(); break;
                     }
                     return true;
                 }
@@ -1457,17 +1353,26 @@ bool ofApp::handleMenuClick(int x, int y) {
     // Link dropdown clicks
     if (linkMenuOpen) {
         float dropX = linkX - 5, dropW = 180;
-        // items: Input, Output
-        int totalL = 2;
+        // items: Input, Output, sep, Import XML...
+        bool isSepL[] = {false, false, true, false};
+        int totalL = 4;
         float iy = menuBarHeight;
 
         if (x >= dropX && x <= dropX + dropW) {
             for (int i = 0; i < totalL; i++) {
+                if (isSepL[i]) { iy += 10; continue; }
                 if (y >= iy && y < iy + itemH) {
                     linkMenuOpen = false;
                     switch (i) {
-                        case 0: loadResolumeXml(true); break;   // Input
-                        case 1: loadResolumeXml(false); break;  // Output
+                        case 0: loadResolumeXml(true); break;   // Input (auto-find)
+                        case 1: loadResolumeXml(false); break;  // Output (auto-find)
+                        case 3: {  // Import XML... (manual file picker)
+                            auto result = ofSystemLoadDialog("Import Resolume XML", false, "");
+                            if (result.bSuccess) {
+                                loadResolumeXml(true, result.filePath);
+                            }
+                            break;
+                        }
                     }
                     return true;
                 }
@@ -1752,6 +1657,7 @@ void ofApp::newProject() {
     // Reset undo for fresh project
     undoManager.clear();
     undoManager.pushState(scene);
+    lastSavedUndoIndex = 0;
 
     ofLogNotice("ofApp") << "New project created";
 }
@@ -1779,6 +1685,119 @@ void ofApp::takeScreenshot() {
     ofLogNotice("ofApp") << "Screenshot saved: " << filename;
 }
 
+void ofApp::exportRender() {
+    // Ask user for resolution multiplier
+    std::string input = ofSystemTextBoxDialog(
+        "Export resolution multiplier (1x, 2x, 4x, etc.):", "2");
+    if (input.empty()) return;
+
+    int scale = 1;
+    try { scale = std::max(1, std::min(8, std::stoi(input))); } catch (...) { return; }
+
+    int renderW = ofGetWidth() * scale;
+    int renderH = ofGetHeight() * scale;
+
+    // Save dialog
+    std::string defaultName = "VirtualStage_" + ofGetTimestampString("%Y%m%d_%H%M%S") + ".png";
+    auto result = ofSystemSaveDialog(defaultName, "Export Image");
+    if (!result.bSuccess) return;
+
+    std::string path = result.filePath;
+    if (path.size() < 4 || path.substr(path.size() - 4) != ".png") {
+        path += ".png";
+    }
+
+    // Allocate FBO at target resolution
+    ofFbo fbo;
+    fbo.allocate(renderW, renderH, GL_RGBA);
+    fbo.begin();
+
+    ofClear(0, 0, 0, 255);
+
+    // Draw background
+    float ambientFactor = propertiesPanel.getAmbientLight() / 100.0f;
+    BackgroundMode bgm = preferences.getBgMode();
+    if (bgm == BackgroundMode::Gradient) {
+        ofColor top = preferences.getBgGradientTop() * ambientFactor;
+        ofColor bot = preferences.getBgGradientBottom() * ambientFactor;
+        ofBackgroundGradient(top, bot, OF_GRADIENT_LINEAR);
+    } else if (bgm == BackgroundMode::Image) {
+        ofBackground(0);
+        if (bgImage.isAllocated()) {
+            ofSetColor(255 * ambientFactor);
+            bgImage.draw(0, 0, renderW, renderH);
+        }
+    } else {
+        ofColor solidColor = preferences.getBgColor() * ambientFactor;
+        ofBackground(solidColor);
+    }
+
+    // Render 3D scene
+    ofEnableDepthTest();
+
+    // Set up camera with same parameters but scaled viewport
+    ofCamera exportCam;
+    exportCam.setPosition(cam.getPosition());
+    exportCam.setOrientation(cam.getOrientationQuat());
+    exportCam.setNearClip(cam.getNearClip());
+    exportCam.setFarClip(cam.getFarClip());
+    exportCam.setFov(cam.getFov());
+
+    exportCam.begin(ofRectangle(0, 0, renderW, renderH));
+    scene.draw(true); // view mode = clean, no selection outlines
+    exportCam.end();
+
+    ofDisableDepthTest();
+
+    fbo.end();
+
+    // Read pixels and save
+    ofPixels pixels;
+    fbo.readToPixels(pixels);
+    ofImage exportImg;
+    exportImg.setFromPixels(pixels);
+    exportImg.save(path);
+
+    screenshotFlashTimer = 1.5f;
+    ofLogNotice("ofApp") << "Image exported: " << path << " (" << renderW << "x" << renderH << ")";
+}
+
+// ── Cabinet assignment helpers ──────────────────────────────────────────────
+
+void ofApp::applyCabinetToScreen(ScreenObject* scr) {
+    if (!scr || scr->cabinetId.empty()) return;
+    if (scr->sourcePxWidth <= 0 || scr->sourcePxHeight <= 0) return;
+    Cabinet c;
+    if (!cabinetLibrary.find(scr->cabinetId, c)) return;
+    // Pitch-based world size: OGL units = px * pitchMm / 10 (1 OGL = 1 cm)
+    float w3d = c.pxToOgl((float)scr->sourcePxWidth);
+    float h3d = c.pxToOgl((float)scr->sourcePxHeight);
+    scr->plane.set(w3d, h3d, 2, 2);
+    // Preserve scale = 1; actual physical size lives in plane.width/height
+    scr->setScale(glm::vec3(1, 1, 1));
+}
+
+void ofApp::autoAssignCabinets() {
+    // For every screen with source-pixel data, try to match a cabinet.
+    // Only re-assigns when no cabinet is set (respects manual overrides).
+    int n = scene.getScreenCount();
+    for (int i = 0; i < n; i++) {
+        auto* s = scene.getScreen(i);
+        if (!s) continue;
+        if (s->sourcePxWidth <= 0 || s->sourcePxHeight <= 0) continue;
+        if (!s->cabinetId.empty()) {
+            // Already assigned — reapply in case pitch changed
+            applyCabinetToScreen(s);
+            continue;
+        }
+        std::string id = cabinetLibrary.detectForSlice(s->sourcePxWidth, s->sourcePxHeight);
+        if (!id.empty()) {
+            s->cabinetId = id;
+            applyCabinetToScreen(s);
+        }
+    }
+}
+
 void ofApp::saveProject(bool saveAs) {
     std::string path = currentProjectPath;
 
@@ -1802,6 +1821,7 @@ void ofApp::saveProject(bool saveAs) {
 
     if (scene.saveProject(path, camJson)) {
         currentProjectPath = path;
+        lastSavedUndoIndex = undoManager.getCurrentIndex();
         ofLogNotice("ofApp") << "Project saved: " << path;
     } else {
         ofLogError("ofApp") << "Failed to save project: " << path;
@@ -1870,6 +1890,7 @@ void ofApp::openProject() {
         // Reset undo for loaded project
         undoManager.clear();
         undoManager.pushState(scene);
+        lastSavedUndoIndex = 0;
 
         ofLogNotice("ofApp") << "Project loaded: " << result.filePath;
     } else {
@@ -1878,6 +1899,12 @@ void ofApp::openProject() {
 }
 
 void ofApp::keyPressed(int key) {
+    // Quit dialog intercepts ESC
+    if (showQuitDialog) {
+        if (key == OF_KEY_ESC) showQuitDialog = false;
+        return;
+    }
+
     // Auth modal intercepts all keys while visible
     if (authModal.isVisible()) {
         authModal.keyPressed(key);
@@ -1887,6 +1914,12 @@ void ofApp::keyPressed(int key) {
     // Settings modal intercepts keys while visible
     if (settingsModal.isVisible()) {
         settingsModal.keyPressed(key);
+        return;
+    }
+
+    // Cabinets modal intercepts keys while visible
+    if (cabinetsModal.isVisible()) {
+        cabinetsModal.keyPressed(key);
         return;
     }
 
@@ -2164,33 +2197,6 @@ void ofApp::keyPressed(int key) {
         case OF_KEY_F10:
             takeScreenshot();
             return;
-        case OF_KEY_F5:
-            if (appMode == AppMode::Designer) {
-                pushUndo();
-                int fi = scene.addStageElement(StageElementType::Floor);
-                scene.selectedStageElement = fi;
-                scene.clearSelection();
-                selectedGroupId = -1;
-            }
-            return;
-        case OF_KEY_F6:
-            if (appMode == AppMode::Designer) {
-                pushUndo();
-                int ti = scene.addStageElement(StageElementType::Truss);
-                scene.selectedStageElement = ti;
-                scene.clearSelection();
-                selectedGroupId = -1;
-            }
-            return;
-        case OF_KEY_F7:
-            if (appMode == AppMode::Designer) {
-                pushUndo();
-                int bi = scene.addStageElement(StageElementType::Layher);
-                scene.selectedStageElement = bi;
-                scene.clearSelection();
-                selectedGroupId = -1;
-            }
-            return;
     }
 
     // --- View mode keys ---
@@ -2301,9 +2307,6 @@ void ofApp::keyPressed(int key) {
                 scene.clearSelection();
                 selectedGroupId = -1;
                 propertiesPanel.setTarget(nullptr);
-            } else if (scene.selectedStageElement >= 0) {
-                pushUndo();
-                scene.removeStageElement(scene.selectedStageElement);
             }
             break;
 
@@ -2428,43 +2431,58 @@ void ofApp::keyPressed(int key) {
 
 // --- Resolume XML Import ---
 
-void ofApp::loadResolumeXml(bool useInputRect) {
-    // Auto-find: most recently modified .xml in Resolume Advanced Output presets
-    std::string presetsDir = ofFilePath::getUserHomeDir() +
-        "/Documents/Resolume Arena/Presets/Advanced Output";
-    std::string xmlPath;
+void ofApp::loadResolumeXml(bool useInputRect, const std::string& manualPath) {
+    std::string xmlPath = manualPath;
 
-    ofDirectory dir(presetsDir);
-    if (dir.exists()) {
-        dir.allowExt("xml");
-        dir.listDir();
+    // If no manual path provided, auto-find most recent XML in Resolume presets
+    if (xmlPath.empty()) {
+        try {
+            std::string homeDir = ofFilePath::getUserHomeDir();
+            std::vector<std::string> presetDirs;
+#ifdef TARGET_OSX
+            presetDirs.push_back(homeDir + "/Documents/Resolume Arena/Presets/Advanced Output");
+            presetDirs.push_back(homeDir + "/Documents/Resolume Avenue/Presets/Advanced Output");
+#elif defined(TARGET_WIN32)
+            presetDirs.push_back(homeDir + "\\Documents\\Resolume Arena\\Presets\\Advanced Output");
+            presetDirs.push_back(homeDir + "\\Documents\\Resolume Avenue\\Presets\\Advanced Output");
+#endif
 
-        // Find newest file by comparing file_time directly (no clock conversion)
-        std::filesystem::file_time_type newestTime;
-        bool found = false;
-        for (size_t i = 0; i < dir.size(); i++) {
-            auto fpath = std::filesystem::path(dir.getPath(i));
-            try {
-                auto mod = std::filesystem::last_write_time(fpath);
-                if (!found || mod > newestTime) {
-                    newestTime = mod;
-                    xmlPath = dir.getPath(i);
-                    found = true;
+            time_t newestTime = 0;
+            for (auto& presetsDir : presetDirs) {
+                struct stat dirSt;
+                if (stat(presetsDir.c_str(), &dirSt) != 0) continue;
+
+                ofDirectory dir(presetsDir);
+                dir.allowExt("xml");
+                dir.listDir();
+
+                for (size_t i = 0; i < dir.size(); i++) {
+                    struct stat st;
+                    if (stat(dir.getPath(i).c_str(), &st) == 0) {
+                        if (st.st_mtime > newestTime) {
+                            newestTime = st.st_mtime;
+                            xmlPath = dir.getPath(i);
+                        }
+                    }
                 }
-            } catch (...) {}
-        }
+            }
 
-        if (found) {
-            ofLogNotice("ofApp") << "Auto-found: " << ofFilePath::getFileName(xmlPath);
+            if (!xmlPath.empty()) {
+                ofLogNotice("ofApp") << "Auto-found: " << ofFilePath::getFileName(xmlPath);
+            }
+        } catch (const std::exception& e) {
+            ofLogWarning("ofApp") << "Error scanning Resolume presets: " << e.what();
+            xmlPath = "";
+        } catch (...) {
+            ofLogWarning("ofApp") << "Error scanning Resolume presets";
+            xmlPath = "";
         }
     }
 
-    // Fallback to file dialog
+    // If auto-find failed, just log and return (no file dialog — use "Import XML..." for manual)
     if (xmlPath.empty()) {
-        ofLogWarning("ofApp") << "No Resolume presets found, opening file dialog";
-        auto result = ofSystemLoadDialog("Load Resolume Advanced Output XML");
-        if (!result.bSuccess) return;
-        xmlPath = result.filePath;
+        ofLogWarning("ofApp") << "No Resolume preset XML found. Use Link > Import XML... to load manually.";
+        return;
     }
 
     ofLogNotice("ofApp") << "Loading: " << xmlPath;
@@ -2680,21 +2698,70 @@ void ofApp::loadResolumeXml(bool useInputRect) {
     float totalW = totalMaxX - totalMinX;
     float totalH = totalMaxY - totalMinY;
 
-    // Scale: fit largest dimension to ~600 3D units
-    float maxDim = std::max(totalW, totalH);
-    float scaleFactor = (maxDim > 0) ? 600.0f / maxDim : 1.0f;
+    // Auto-detect cabinets for each slice (empty library → no match → arbitrary scale).
+    // Collect matched-cabinet pitches; if all slices share one pitch we use it
+    // to place screens in real-world units. If cabinets differ we fall back to
+    // arbitrary scale for positions (but each slice still uses its own pitch
+    // for its physical size).
+    std::vector<std::string> sliceCabs(allSlices.size());
+    float sharedPitchMm = -1.0f;
+    bool  pitchMixed    = false;
+    int   matchedCount  = 0;
+    for (size_t i = 0; i < allSlices.size(); i++) {
+        const auto& sd = allSlices[i];
+        std::string cid = cabinetLibrary.detectForSlice((int)sd.rw, (int)sd.rh);
+        sliceCabs[i] = cid;
+        if (cid.empty()) continue;
+        matchedCount++;
+        Cabinet c;
+        if (cabinetLibrary.find(cid, c)) {
+            if (sharedPitchMm < 0) sharedPitchMm = c.pitchMm;
+            else if (std::abs(sharedPitchMm - c.pitchMm) > 0.001f) pitchMixed = true;
+        }
+    }
+    float pxToOglForPos = 0.0f; // >0 = physical-real positioning
+    if (matchedCount == (int)allSlices.size() && !pitchMixed && sharedPitchMm > 0) {
+        pxToOglForPos = sharedPitchMm / 10.0f;
+        ofLogNotice("Cabinet") << "Resolume import: physical-scale mode, pitch="
+                               << sharedPitchMm << "mm, scale=" << pxToOglForPos
+                               << " OGL/px";
+    } else {
+        // Arbitrary fit (legacy behavior) — fit largest dimension to ~600 OGL units
+        float maxDim = std::max(totalW, totalH);
+        pxToOglForPos = 0; // sentinel: use fallback below
+        ofLogNotice("Cabinet") << "Resolume import: arbitrary-scale mode ("
+                               << matchedCount << "/" << allSlices.size() << " slices matched)";
+        (void)maxDim;
+    }
+    float fallbackScale = 1.0f;
+    {
+        float maxDim = std::max(totalW, totalH);
+        fallbackScale = (maxDim > 0) ? 600.0f / maxDim : 1.0f;
+    }
 
+    // Flat index into allSlices as we iterate parsedScreens
+    size_t flatIdx = 0;
     for (auto& sg : parsedScreens) {
         int gid = scene.addGroup(sg.name);
 
         for (auto& sd : sg.slices) {
-            float w3d = sd.rw * scaleFactor;
-            float h3d = sd.rh * scaleFactor;
+            // Per-slice size: use cabinet pitch if matched, else fallback
+            std::string cid = (flatIdx < sliceCabs.size()) ? sliceCabs[flatIdx] : "";
+            float wScale = fallbackScale, hScale = fallbackScale;
+            if (!cid.empty()) {
+                Cabinet c;
+                if (cabinetLibrary.find(cid, c)) {
+                    wScale = hScale = c.pitchMm / 10.0f;
+                }
+            }
+            float w3d = sd.rw * wScale;
+            float h3d = sd.rh * hScale;
 
-            // Position: remap to 3D space, flip Y, center around X=0
-            float cx = (sd.rx + sd.rw * 0.5f - totalMinX) * scaleFactor;
-            float cy = (totalMaxY - (sd.ry + sd.rh * 0.5f)) * scaleFactor;
-            cx -= totalW * scaleFactor * 0.5f;
+            // Position: physical if we have shared pitch, else fallback
+            float posScale = (pxToOglForPos > 0) ? pxToOglForPos : fallbackScale;
+            float cx = (sd.rx + sd.rw * 0.5f - totalMinX) * posScale;
+            float cy = (totalMaxY - (sd.ry + sd.rh * 0.5f)) * posScale;
+            cx -= totalW * posScale * 0.5f;
 
             int idx = scene.addSliceToGroup(gid, sd.name);
             auto* screen = scene.getScreen(idx);
@@ -2702,11 +2769,17 @@ void ofApp::loadResolumeXml(bool useInputRect) {
                 screen->plane.set(w3d, h3d, 2, 2);
                 screen->setPosition(glm::vec3(cx, cy, 0));
 
-                // Crop: slice region relative to total bounding box
-                float cropX = (sd.rx - totalMinX) / totalW;
-                float cropY = (sd.ry - totalMinY) / totalH;
-                float cropW = sd.rw / totalW;
-                float cropH = sd.rh / totalH;
+                // Remember pixel dims + cabinet so future library edits can
+                // re-apply the physical scale correctly.
+                screen->sourcePxWidth  = (int)sd.rw;
+                screen->sourcePxHeight = (int)sd.rh;
+                screen->cabinetId      = cid;
+
+                // Crop: slice region relative to composition size
+                float cropX = sd.rx / compW;
+                float cropY = sd.ry / compH;
+                float cropW = sd.rw / compW;
+                float cropH = sd.rh / compH;
                 screen->setCropRect(ofRectangle(cropX, cropY, cropW, cropH));
 
                 // Apply polygon mask if available
@@ -2714,6 +2787,7 @@ void ofApp::loadResolumeXml(bool useInputRect) {
                     screen->setMask(sd.contourPoints);
                 }
             }
+            flatIdx++;
         }
     }
 
@@ -2860,6 +2934,43 @@ void ofApp::drawMappingMode() {
 }
 
 void ofApp::mousePressed(int x, int y, int button) {
+    // Quit dialog intercepts all clicks
+    if (showQuitDialog) {
+        float w = ofGetWidth(), h = ofGetHeight();
+        float panelW = 340, panelH = 130;
+        float px = (w - panelW) / 2, py = (h - panelH) / 2;
+        float btnW = 90, btnH = 28, btnY = py + panelH - 45;
+
+        if (quitHasUnsaved) {
+            // 3 buttons: Cancel | Quit | Save & Quit
+            float totalW = btnW * 3 + 20;
+            float bx = px + (panelW - totalW) / 2;
+            if (x >= bx && x <= bx + btnW && y >= btnY && y <= btnY + btnH) {
+                showQuitDialog = false; return; // Cancel
+            }
+            bx += btnW + 10;
+            if (x >= bx && x <= bx + btnW && y >= btnY && y <= btnY + btnH) {
+                ofExit(); return; // Quit without saving
+            }
+            bx += btnW + 10;
+            if (x >= bx && x <= bx + btnW && y >= btnY && y <= btnY + btnH) {
+                saveProject(false); ofExit(); return; // Save & Quit
+            }
+        } else {
+            // 2 buttons: Cancel | Quit
+            float totalW = btnW * 2 + 10;
+            float bx = px + (panelW - totalW) / 2;
+            if (x >= bx && x <= bx + btnW && y >= btnY && y <= btnY + btnH) {
+                showQuitDialog = false; return; // Cancel
+            }
+            bx += btnW + 10;
+            if (x >= bx && x <= bx + btnW && y >= btnY && y <= btnY + btnH) {
+                ofExit(); return; // Quit
+            }
+        }
+        return; // click outside buttons does nothing (dialog stays)
+    }
+
     // Auth modal intercepts all clicks while visible
     if (authModal.isVisible()) {
         authModal.mousePressed(x, y);
@@ -2869,6 +2980,12 @@ void ofApp::mousePressed(int x, int y, int button) {
     // Settings modal
     if (settingsModal.isVisible()) {
         settingsModal.mousePressed(x, y);
+        return;
+    }
+
+    // Cabinets modal
+    if (cabinetsModal.isVisible()) {
+        cabinetsModal.mousePressed(x, y);
         return;
     }
 
@@ -2887,7 +3004,21 @@ void ofApp::mousePressed(int x, int y, int button) {
     // Update modal click handling
     if (showUpdateModal) {
         if (updateState == UpdateState::Available) {
-            startDownloadAndUpdate();
+            // Button hit testing (must match drawUpdateModal layout)
+            float w2 = ofGetWidth(), h2 = ofGetHeight();
+            float panelW = 360, panelH = 170;
+            float px2 = (w2 - panelW) / 2, py2 = (h2 - panelH) / 2;
+            float btnW = 90, btnH = 28;
+            float btnY = py2 + panelH - 42;
+            float totalW = btnW * 2 + 10;
+            float bx = px2 + (panelW - totalW) / 2;
+
+            if (x >= bx && x <= bx + btnW && y >= btnY && y <= btnY + btnH) {
+                startDownloadAndUpdate(); // Update button
+            } else if (x >= bx + btnW + 10 && x <= bx + btnW * 2 + 10 && y >= btnY && y <= btnY + btnH) {
+                showUpdateModal = false; // Skip button
+                updateState = UpdateState::Idle;
+            }
         } else if (updateState != UpdateState::Checking && updateState != UpdateState::Downloading) {
             showUpdateModal = false;
             updateState = UpdateState::Idle;
@@ -3012,9 +3143,6 @@ void ofApp::mousePressed(int x, int y, int button) {
         if (scene.getPrimarySelected() >= 0) {
             auto* primary = scene.getScreen(scene.getPrimarySelected());
             if (primary) { gizmoRefPos = primary->getPosition(); hasGizmoRef = true; }
-        } else if (scene.selectedStageElement >= 0) {
-            auto* elem = scene.getStageElement(scene.selectedStageElement);
-            if (elem) { gizmoRefPos = elem->getPosition(); hasGizmoRef = true; }
         }
 
         if (hasGizmoRef && gizmo.hitTest(cam, glm::vec2(x, y), gizmoRefPos)) {
@@ -3023,17 +3151,11 @@ void ofApp::mousePressed(int x, int y, int button) {
             pushUndo();
 
             std::vector<GizmoTarget> targets;
-            if (scene.getPrimarySelected() >= 0) {
-                for (int si : scene.getSelectedIndicesSorted()) {
-                    auto* s = scene.getScreen(si);
-                    if (s) targets.push_back(GizmoTarget(s));
-                }
-                gizmo.mirrorYaw = propertiesPanel.isMirrorYaw();
-            } else {
-                auto* elem = scene.getStageElement(scene.selectedStageElement);
-                if (elem) targets.push_back(GizmoTarget(elem));
-                gizmo.mirrorYaw = false;
+            for (int si : scene.getSelectedIndicesSorted()) {
+                auto* s = scene.getScreen(si);
+                if (s) targets.push_back(GizmoTarget(s));
             }
+            gizmo.mirrorYaw = propertiesPanel.isMirrorYaw();
 
             gizmo.setEdgeSnapScreens(&scene.screens);
             if (!targets.empty()) {
@@ -3043,9 +3165,8 @@ void ofApp::mousePressed(int x, int y, int button) {
         }
     }
 
-    // Pick objects in scene (screens first, then stage elements)
+    // Pick objects in scene
     int hit = scene.pick(cam, glm::vec2(x, y));
-    int elemHit = (hit < 0) ? scene.pickStageElement(cam, glm::vec2(x, y)) : -1;
 
 #ifdef TARGET_OSX
     bool multiKey = ofGetKeyPressed(OF_KEY_SUPER);
@@ -3053,7 +3174,6 @@ void ofApp::mousePressed(int x, int y, int button) {
     bool multiKey = ofGetKeyPressed(OF_KEY_CONTROL);
 #endif
     if (hit >= 0) {
-        scene.selectedStageElement = -1;
         if (multiKey) {
             scene.toggleSelected(hit);
         } else {
@@ -3061,13 +3181,7 @@ void ofApp::mousePressed(int x, int y, int button) {
         }
         selectedGroupId = -1;
         updatePropertiesForSelection();
-    } else if (elemHit >= 0) {
-        scene.clearSelection();
-        selectedGroupId = -1;
-        scene.selectedStageElement = elemHit;
-        propertiesPanel.setTarget(nullptr);
     } else {
-        scene.selectedStageElement = -1;
         if (!multiKey) {
             if (selectMode) {
                 cam.disableMouseInput();
@@ -3388,11 +3502,12 @@ static int compareVersions(const std::string& a, const std::string& b) {
     return a3 - b3;
 }
 
-void ofApp::checkForUpdates() {
+void ofApp::checkForUpdates(bool silent) {
     if (updateState == UpdateState::Checking || updateState == UpdateState::Downloading) return;
     updateState = UpdateState::Checking;
     updateErrorDetail = "";
-    showUpdateModal = true;
+    silentUpdateCheck = silent;
+    if (!silent) showUpdateModal = true;
 
     std::thread([this]() {
         // Write response to temp file using system-level HTTP tools
@@ -3413,6 +3528,7 @@ void ofApp::checkForUpdates() {
         ret = silentSystem(cmd);
 #endif
         if (ret != 0) {
+            if (silentUpdateCheck) { updateState = UpdateState::Idle; return; }
             updateState = UpdateState::Error;
             updateErrorDetail = "Could not reach GitHub";
             return;
@@ -3421,6 +3537,7 @@ void ofApp::checkForUpdates() {
         // Read the temp file
         ofFile f(tmpPath);
         if (!f.exists()) {
+            if (silentUpdateCheck) { updateState = UpdateState::Idle; return; }
             updateState = UpdateState::Error;
             updateErrorDetail = "No response received";
             return;
@@ -3430,6 +3547,7 @@ void ofApp::checkForUpdates() {
         ofFile::removeFile(tmpPath);
 
         if (body.empty()) {
+            if (silentUpdateCheck) { updateState = UpdateState::Idle; return; }
             updateState = UpdateState::Error;
             updateErrorDetail = "Empty response";
             return;
@@ -3440,6 +3558,7 @@ void ofApp::checkForUpdates() {
 
             std::string tag = json.value("tag_name", "");
             if (tag.empty()) {
+                if (silentUpdateCheck) { updateState = UpdateState::Idle; return; }
                 updateState = UpdateState::Error;
                 updateErrorDetail = "No release tag found";
                 return;
@@ -3480,13 +3599,19 @@ void ofApp::checkForUpdates() {
 
             if (compareVersions(cleanLatest, cleanCurrent) > 0) {
                 updateState = UpdateState::Available;
+                showUpdateModal = true;  // always show when update is available
             } else {
                 updateState = UpdateState::UpToDate;
+                if (silentUpdateCheck) {
+                    // Silent check found no update — don't bother user
+                    updateState = UpdateState::Idle;
+                }
             }
         } catch (const std::exception& e) {
+            ofLogError("Update") << "JSON parse error: " << e.what();
+            if (silentUpdateCheck) { updateState = UpdateState::Idle; return; }
             updateState = UpdateState::Error;
             updateErrorDetail = "Could not parse response";
-            ofLogError("Update") << "JSON parse error: " << e.what();
         }
     }).detach();
 }
@@ -3641,8 +3766,24 @@ void ofApp::drawUpdateModal() {
         ofSetColor(100, 220, 100);
         ofDrawBitmapString(to, px + 60, cy + 50);
 
-        ofSetColor(0, 200, 255);
-        ofDrawBitmapString("Click to download  |  Esc to close", px + panelW / 2 - 140, py + panelH - 15);
+        // "Update" and "Skip" buttons
+        float btnW = 90, btnH = 28;
+        float btnY = py + panelH - 42;
+        float totalW = btnW * 2 + 10;
+        float bx = px + (panelW - totalW) / 2;
+
+        ofSetColor(0, 100, 180);
+        ofDrawRectangle(bx, btnY, btnW, btnH);
+        ofSetColor(255);
+        std::string lbl1 = "Update";
+        ofDrawBitmapString(lbl1, bx + (btnW - lbl1.size() * 8) / 2, btnY + 18);
+
+        bx += btnW + 10;
+        ofSetColor(70);
+        ofDrawRectangle(bx, btnY, btnW, btnH);
+        ofSetColor(200);
+        std::string lbl2 = "Skip";
+        ofDrawBitmapString(lbl2, bx + (btnW - lbl2.size() * 8) / 2, btnY + 18);
 
     } else if (updateState == UpdateState::Downloading) {
         ofSetColor(255, 200, 0);
@@ -3829,10 +3970,13 @@ void ofApp::saveToCloud() {
     currentCloudProjectName = name;
 
     // Upload in a background thread
+    ofLogNotice("Cloud") << "Saving project '" << name << "' to cloud (user: " << authManager.getSession().userId << ")...";
     std::thread([this, projectData, name]() {
         std::string err;
-        if (!cloudStorage.saveProject(authManager.getSession(), projectData, name, err)) {
-            ofLogError("CloudStorage") << "Save failed: " << err;
+        if (cloudStorage.saveProject(authManager.getSession(), projectData, name, err)) {
+            ofLogNotice("Cloud") << "Project '" << name << "' saved to cloud OK";
+        } else {
+            ofLogError("Cloud") << "Save failed: " << err;
         }
     }).detach();
 }
@@ -3847,16 +3991,19 @@ void ofApp::loadFromCloud() {
     cloudProjects.clear();
     cloudLoadError.clear();
 
+    ofLogNotice("Cloud") << "Loading project list...";
     std::thread([this]() {
         std::string err;
         std::vector<CloudStorage::CloudProject> projects;
         if (cloudStorage.listProjects(authManager.getSession(), projects, err)) {
-            // Store in member on main thread via flag
-            // Direct assignment is safe here since cloudLoadState == Loading
-            // and the main thread only reads these when state == Loaded/Error
+            ofLogNotice("Cloud") << "Found " << projects.size() << " cloud projects";
+            for (auto& p : projects) {
+                ofLogNotice("Cloud") << "  - " << p.name << " (id: " << p.id << ")";
+            }
             cloudProjects  = projects;
             cloudLoadState = CloudLoadState::Loaded;
         } else {
+            ofLogError("Cloud") << "List failed: " << err;
             cloudLoadError = err;
             cloudLoadState = CloudLoadState::Error;
         }
@@ -3997,4 +4144,83 @@ bool ofApp::handleCloudLoadModalClick(int x, int y) {
         }
     }
     return true;
+}
+
+// --- Quit Confirmation Dialog ---
+
+bool ofApp::hasUnsavedChanges() const {
+    return undoManager.getCurrentIndex() != lastSavedUndoIndex;
+}
+
+void ofApp::requestQuit() {
+    quitHasUnsaved = hasUnsavedChanges();
+    showQuitDialog = true;
+}
+
+void ofApp::drawQuitDialog() {
+    float w = ofGetWidth();
+    float h = ofGetHeight();
+
+    // Dim background
+    ofSetColor(0, 0, 0, 180);
+    ofDrawRectangle(0, 0, w, h);
+
+    float panelW = 340;
+    float panelH = 130;
+    float px = (w - panelW) / 2;
+    float py = (h - panelH) / 2;
+
+    // Shadow + background
+    ofSetColor(0, 0, 0, 100);
+    ofDrawRectangle(px + 4, py + 4, panelW, panelH);
+    ofSetColor(38, 38, 38);
+    ofDrawRectangle(px, py, panelW, panelH);
+
+    // Border
+    ofNoFill();
+    ofSetLineWidth(2);
+    ofSetColor(0, 120, 200);
+    ofDrawRectangle(px, py, panelW, panelH);
+    ofFill();
+    ofSetLineWidth(1);
+
+    // Title
+    ofSetColor(255);
+    std::string title = quitHasUnsaved ? "You have unsaved changes" : "Quit VirtualStage?";
+    ofDrawBitmapString(title, px + (panelW - title.size() * 8) / 2, py + 35);
+
+    if (quitHasUnsaved) {
+        ofSetColor(160);
+        std::string sub = "Do you want to save before quitting?";
+        ofDrawBitmapString(sub, px + (panelW - sub.size() * 8) / 2, py + 55);
+    }
+
+    // Buttons
+    float btnW = 90, btnH = 28;
+    float btnY = py + panelH - 45;
+
+    auto drawBtn = [&](float bx, const std::string& label, ofColor bg, ofColor fg) {
+        ofSetColor(bg);
+        ofDrawRectangle(bx, btnY, btnW, btnH);
+        ofSetColor(fg);
+        ofDrawBitmapString(label, bx + (btnW - label.size() * 8) / 2, btnY + 18);
+    };
+
+    if (quitHasUnsaved) {
+        float totalW = btnW * 3 + 20;
+        float bx = px + (panelW - totalW) / 2;
+        drawBtn(bx, "Cancel", ofColor(70), ofColor(200));
+        bx += btnW + 10;
+        drawBtn(bx, "Quit", ofColor(150, 50, 50), ofColor(255));
+        bx += btnW + 10;
+        drawBtn(bx, "Save & Quit", ofColor(0, 100, 180), ofColor(255));
+    } else {
+        float totalW = btnW * 2 + 10;
+        float bx = px + (panelW - totalW) / 2;
+        drawBtn(bx, "Cancel", ofColor(70), ofColor(200));
+        bx += btnW + 10;
+        drawBtn(bx, "Quit", ofColor(150, 50, 50), ofColor(255));
+    }
+
+    ofSetColor(255);
 }

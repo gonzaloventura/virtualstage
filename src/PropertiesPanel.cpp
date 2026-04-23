@@ -29,6 +29,7 @@ void PropertiesPanel::setup(float x, float y) {
 
     curvatureGui.setup("Curvature");
     curvatureGui.add(curvatureParam);
+    curvatureGui.add(curveExtentParam);
 
     gapGui.setup("Spacing");
     gapGui.add(gapParam);
@@ -43,6 +44,7 @@ void PropertiesPanel::setup(float x, float y) {
     widthParam.addListener(this, &PropertiesPanel::onParamChanged);
     heightParam.addListener(this, &PropertiesPanel::onParamChanged);
     curvatureParam.addListener(this, &PropertiesPanel::onParamChanged);
+    curveExtentParam.addListener(this, &PropertiesPanel::onParamChanged);
     gapParam.addListener(this, &PropertiesPanel::onParamChanged);
     ambientReset.addListener(this, &PropertiesPanel::onAmbientReset);
     mirrorYaw.addListener(this, &PropertiesPanel::onMirrorYawChanged);
@@ -111,7 +113,7 @@ void PropertiesPanel::setMultipleTargets(const std::vector<ScreenObject*>& targe
     syncing = true;
     glm::vec3 avgPos(0), avgRot(0);
     float avgW = 0, avgH = 0;
-    float avgCurv = 0;
+    float avgCurv = 0, avgExtent = 0;
     for (auto* t : multiTargets) {
         avgPos += t->getPosition();
         avgRot += t->getRotationEuler();
@@ -119,6 +121,7 @@ void PropertiesPanel::setMultipleTargets(const std::vector<ScreenObject*>& targe
         avgW += t->getPlaneWidth() * s.x;
         avgH += t->getPlaneHeight() * s.y;
         avgCurv += t->getCurvature();
+        avgExtent += t->getCurveExtent();
     }
     float n = (float)multiCount;
     avgPos /= n;
@@ -126,6 +129,7 @@ void PropertiesPanel::setMultipleTargets(const std::vector<ScreenObject*>& targe
     avgW /= n;
     avgH /= n;
     avgCurv /= n;
+    avgExtent /= n;
 
     posX = avgPos.x; posY = avgPos.y; posZ = avgPos.z;
     rotX = avgRot.x; rotY = avgRot.y; rotZ = avgRot.z;
@@ -134,6 +138,7 @@ void PropertiesPanel::setMultipleTargets(const std::vector<ScreenObject*>& targe
         heightParam = preferences->oglToDisplay(avgH);
     }
     curvatureParam = avgCurv;
+    curveExtentParam = avgExtent;
 
     // Compute gap between 2 slices (edge-to-edge distance along X)
     if (multiCount == 2 && multiTargets[0] && multiTargets[1]) {
@@ -174,6 +179,7 @@ void PropertiesPanel::syncFromTarget() {
     }
 
     curvatureParam = target->getCurvature();
+    curveExtentParam = target->getCurveExtent();
 
     syncing = false;
 }
@@ -193,6 +199,7 @@ void PropertiesPanel::syncToTarget() {
             std::max(0.01f, newScaleY),
             1.0f));
     }
+    target->setCurveExtent(curveExtentParam);
     target->setCurvature(curvatureParam);
 }
 
@@ -211,6 +218,7 @@ void PropertiesPanel::captureLastValues() {
     lastRot = glm::vec3(rotX, rotY, rotZ);
     lastSize = glm::vec2(widthParam, heightParam);
     lastCurvature = curvatureParam;
+    lastCurveExtent = curveExtentParam;
     lastGap = gapParam;
 }
 
@@ -221,6 +229,7 @@ void PropertiesPanel::syncToMultiTargets() {
     glm::vec3 deltaRot = glm::vec3(rotX, rotY, rotZ) - lastRot;
     glm::vec2 deltaSize = glm::vec2(widthParam, heightParam) - lastSize;
     float deltaCurv = curvatureParam - lastCurvature;
+    float deltaExtent = curveExtentParam - lastCurveExtent;
 
     // Mirror Yaw: when enabled with exactly 2 screens, apply opposite yaw
     bool doMirror = mirrorYaw && multiTargets.size() == 2
@@ -259,6 +268,7 @@ void PropertiesPanel::syncToMultiTargets() {
                     std::max(0.01f, newSy),
                     1.0f));
             }
+            t->setCurveExtent(ofClamp(t->getCurveExtent() + deltaExtent, 0, 100));
             t->setCurvature(t->getCurvature() + deltaCurv);
         }
     } else {
@@ -279,6 +289,7 @@ void PropertiesPanel::syncToMultiTargets() {
                     std::max(0.01f, newSy),
                     1.0f));
             }
+            t->setCurveExtent(ofClamp(t->getCurveExtent() + deltaExtent, 0, 100));
             t->setCurvature(t->getCurvature() + deltaCurv);
         }
     }
@@ -386,6 +397,7 @@ bool PropertiesPanel::handleRightClick(int x, int y) {
         if (tryEditParam(sizeGui, heightParam)) return true;
     }
     if (tryEditParam(curvatureGui, curvatureParam)) return true;
+    if (tryEditParam(curvatureGui, curveExtentParam)) return true;
 
     return false;
 }

@@ -20,6 +20,15 @@
 // ALTER TABLE projects ADD CONSTRAINT projects_user_name_key UNIQUE (user_id, name);
 // ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 // CREATE POLICY "Users own rows" ON projects FOR ALL USING (user_id = auth.uid());
+//
+// Also required for cabinet library cloud sync:
+// CREATE TABLE user_cabinets (
+//   user_id uuid PRIMARY KEY REFERENCES auth.users NOT NULL DEFAULT auth.uid(),
+//   data    jsonb NOT NULL,
+//   updated_at timestamptz DEFAULT now()
+// );
+// ALTER TABLE user_cabinets ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "Users own row" ON user_cabinets FOR ALL USING (user_id = auth.uid());
 // ─────────────────────────────────────────────────────────────────────────────
 
 class CloudStorage {
@@ -62,6 +71,15 @@ public:
     bool savePreferences(const AuthManager::Session& session,
                          const std::string& jsonData,
                          std::string& outError);
+
+    // ── User cabinets (LED panel library) ───────────────────────────────────
+    // Requires table: user_cabinets(user_id uuid UNIQUE, data jsonb, ...)
+    bool loadCabinets(const AuthManager::Session& session,
+                      std::string& outData,
+                      std::string& outError);
+    bool saveCabinets(const AuthManager::Session& session,
+                      const std::string& jsonData,
+                      std::string& outError);
 
 private:
     // Generic curl wrapper for Supabase REST (PostgREST)

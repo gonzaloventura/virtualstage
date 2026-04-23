@@ -1,7 +1,6 @@
 #include "win_byte_fix.h"
 #include "UndoManager.h"
 #include "Scene.h"
-#include "StageElement.h"
 
 SceneSnapshot UndoManager::captureState(Scene& scene) {
     SceneSnapshot snap;
@@ -13,14 +12,8 @@ SceneSnapshot UndoManager::captureState(Scene& scene) {
     for (auto& g : scene.groups) {
         snap.groups.push_back({g.id, g.name, g.sourceIndex, g.sourceName});
     }
-    for (auto& e : scene.stageElements) {
-        SceneSnapshot::ElementData ed;
-        ed.json = e->toJson();
-        snap.elements.push_back(ed);
-    }
     snap.selectedIndices = scene.selectedIndices;
     snap.primarySelected = scene.primarySelected;
-    snap.selectedStageElement = scene.selectedStageElement;
     return snap;
 }
 
@@ -51,15 +44,6 @@ void UndoManager::restoreState(Scene& scene, const SceneSnapshot& snapshot) {
         if (g.id > maxGroupId) maxGroupId = g.id;
     }
     scene.nextGroupId = maxGroupId + 1;
-
-    // Rebuild stage elements from snapshot
-    scene.stageElements.clear();
-    for (auto& ed : snapshot.elements) {
-        auto elem = std::make_unique<StageElement>();
-        elem->fromJson(ed.json);
-        scene.stageElements.push_back(std::move(elem));
-    }
-    scene.selectedStageElement = snapshot.selectedStageElement;
 
     // Restore selection
     scene.selectedIndices = snapshot.selectedIndices;

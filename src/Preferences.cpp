@@ -82,6 +82,7 @@ void Preferences::loadLocal() {
         }
         if (j.contains("hideStatusBarInView")) hideStatusBarInView = j.value("hideStatusBarInView", false);
         if (j.contains("hideTitleBarInView")) hideTitleBarInView = j.value("hideTitleBarInView", false);
+        if (j.contains("checkForUpdatesOnStart")) checkForUpdatesOnStart = j.value("checkForUpdatesOnStart", true);
     } catch (...) {}
 }
 
@@ -104,6 +105,7 @@ void Preferences::saveLocal() {
     if (!bgImagePath.empty()) j["bgImagePath"] = bgImagePath;
     j["hideStatusBarInView"] = hideStatusBarInView;
     j["hideTitleBarInView"] = hideTitleBarInView;
+    j["checkForUpdatesOnStart"] = checkForUpdatesOnStart;
 
     std::ofstream f(getPrefsPath());
     if (f.is_open()) {
@@ -206,6 +208,16 @@ void Preferences::setHideTitleBarInView(bool v) {
     hideTitleBarInView = v;
 }
 
+bool Preferences::getCheckForUpdatesOnStart() const {
+    std::lock_guard<std::mutex> lock(mtx);
+    return checkForUpdatesOnStart;
+}
+
+void Preferences::setCheckForUpdatesOnStart(bool v) {
+    std::lock_guard<std::mutex> lock(mtx);
+    checkForUpdatesOnStart = v;
+}
+
 // ── Conversion ──────────────────────────────────────────────────────────────
 // Base mapping: 1 OGL unit = 1 cm → 100 OGL = 1 m
 
@@ -241,6 +253,7 @@ std::string Preferences::toJsonString() const {
     if (!bgImagePath.empty()) j["bgImagePath"] = bgImagePath;
     j["hideStatusBarInView"] = hideStatusBarInView;
     j["hideTitleBarInView"] = hideTitleBarInView;
+    j["checkForUpdatesOnStart"] = checkForUpdatesOnStart;
     return j.dump();
 }
 
@@ -262,5 +275,6 @@ void Preferences::fromJsonString(const std::string& jsonStr) {
         }
         if (j.contains("hideStatusBarInView")) hideStatusBarInView = j.value("hideStatusBarInView", false);
         if (j.contains("hideTitleBarInView")) hideTitleBarInView = j.value("hideTitleBarInView", false);
+        if (j.contains("checkForUpdatesOnStart")) checkForUpdatesOnStart = j.value("checkForUpdatesOnStart", true);
     } catch (...) {}
 }

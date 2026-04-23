@@ -1,7 +1,6 @@
 #pragma once
 #include "ofMain.h"
 #include "ScreenObject.h"
-#include "StageElement.h"
 #include <vector>
 #include <set>
 #include <memory>
@@ -107,20 +106,7 @@ public:
     int nextScreenId = 1;
     int nextGroupId = 1;
 
-    // Stage elements (floor, truss, box)
-    std::vector<std::unique_ptr<StageElement>> stageElements;
-    int addStageElement(StageElementType type, const std::string& name = "");
-    void removeStageElement(int index);
-    StageElement* getStageElement(int index);
-    int getStageElementCount() const;
-    int selectedStageElement = -1;
-
-    // 3D picking for stage elements
-    int pickStageElement(const ofCamera& cam, const glm::vec2& screenPos);
-
 private:
-    bool rayIntersectsAABB(const glm::vec3& rayOrigin, const glm::vec3& rayDir,
-                           const StageElement& elem, float& t);
     ofLight light;
 
 #ifdef TARGET_OSX

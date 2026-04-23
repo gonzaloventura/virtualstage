@@ -10,14 +10,6 @@ static const MeasurementUnit unitValues[] = {
 };
 static const int unitCount = 4;
 
-static const char* bgModeLabels[] = { "Solid Color", "Gradient", "Image" };
-static const BackgroundMode bgModeValues[] = {
-    BackgroundMode::Solid,
-    BackgroundMode::Gradient,
-    BackgroundMode::Image
-};
-static const int bgModeCount = 3;
-
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 void SettingsModal::show(Preferences* p) {
@@ -27,10 +19,6 @@ void SettingsModal::show(Preferences* p) {
         MeasurementUnit u = prefs->getUnit();
         for (int i = 0; i < unitCount; i++) {
             if (unitValues[i] == u) { selectedUnitIndex = i; break; }
-        }
-        BackgroundMode bm = prefs->getBgMode();
-        for (int i = 0; i < bgModeCount; i++) {
-            if (bgModeValues[i] == bm) { selectedBgMode = i; break; }
         }
     }
 }
@@ -61,7 +49,7 @@ void SettingsModal::mousePressed(int x, int y) {
     float W = ofGetWidth();
     float H = ofGetHeight();
     float panelW = 360;
-    float panelH = 500;
+    float panelH = 340;
     float px = (W - panelW) / 2;
     float py = (H - panelH) / 2;
 
@@ -92,96 +80,13 @@ void SettingsModal::mousePressed(int x, int y) {
         }
     }
 
-    // --- Background Mode radio buttons ---
-    float bgSectionY = radioStartY + unitCount * radioH + 40;
-    float bgRadioStartY = bgSectionY + 20;
-
-    for (int i = 0; i < bgModeCount; i++) {
-        float ry = bgRadioStartY + i * radioH;
-        if (x >= radioX && x <= px + panelW - 30 &&
-            y >= ry && y <= ry + radioH) {
-            selectedBgMode = i;
-            if (prefs) {
-                prefs->setBgMode(bgModeValues[selectedBgMode]);
-
-                // If Image mode, prompt for file
-                if (bgModeValues[selectedBgMode] == BackgroundMode::Image) {
-                    ofFileDialogResult result = ofSystemLoadDialog("Load Background Image", false);
-                    if (result.bSuccess) {
-                        prefs->setBgImagePath(result.getPath());
-                    }
-                }
-
-                prefs->saveLocal();
-                if (onPreferenceChanged) onPreferenceChanged();
-            }
-            return;
-        }
-    }
-
-    // --- Color edit buttons (Solid, Gradient top, Gradient bottom) ---
-    float colorBtnsY = bgRadioStartY + bgModeCount * radioH + 15;
-    float btnW = 120;
-    float btnH = 24;
-
-    if (prefs) {
-        BackgroundMode mode = prefs->getBgMode();
-        if (mode == BackgroundMode::Solid) {
-            // "Edit Color" button
-            if (x >= radioX && x <= radioX + btnW && y >= colorBtnsY && y <= colorBtnsY + btnH) {
-                ofColor c = prefs->getBgColor();
-                std::string input = ofSystemTextBoxDialog("Solid Color (R,G,B)",
-                    ofToString(c.r) + "," + ofToString(c.g) + "," + ofToString(c.b));
-                if (!input.empty()) {
-                    auto parts = ofSplitString(input, ",");
-                    if (parts.size() >= 3) {
-                        prefs->setBgColor(ofColor(ofToInt(parts[0]), ofToInt(parts[1]), ofToInt(parts[2])));
-                        prefs->saveLocal();
-                        if (onPreferenceChanged) onPreferenceChanged();
-                    }
-                }
-                return;
-            }
-        } else if (mode == BackgroundMode::Gradient) {
-            // "Top Color" button
-            if (x >= radioX && x <= radioX + btnW && y >= colorBtnsY && y <= colorBtnsY + btnH) {
-                ofColor c = prefs->getBgGradientTop();
-                std::string input = ofSystemTextBoxDialog("Gradient Top (R,G,B)",
-                    ofToString(c.r) + "," + ofToString(c.g) + "," + ofToString(c.b));
-                if (!input.empty()) {
-                    auto parts = ofSplitString(input, ",");
-                    if (parts.size() >= 3) {
-                        prefs->setBgGradientTop(ofColor(ofToInt(parts[0]), ofToInt(parts[1]), ofToInt(parts[2])));
-                        prefs->saveLocal();
-                        if (onPreferenceChanged) onPreferenceChanged();
-                    }
-                }
-                return;
-            }
-            // "Bottom Color" button
-            float btn2Y = colorBtnsY + btnH + 8;
-            if (x >= radioX && x <= radioX + btnW && y >= btn2Y && y <= btn2Y + btnH) {
-                ofColor c = prefs->getBgGradientBottom();
-                std::string input = ofSystemTextBoxDialog("Gradient Bottom (R,G,B)",
-                    ofToString(c.r) + "," + ofToString(c.g) + "," + ofToString(c.b));
-                if (!input.empty()) {
-                    auto parts = ofSplitString(input, ",");
-                    if (parts.size() >= 3) {
-                        prefs->setBgGradientBottom(ofColor(ofToInt(parts[0]), ofToInt(parts[1]), ofToInt(parts[2])));
-                        prefs->saveLocal();
-                        if (onPreferenceChanged) onPreferenceChanged();
-                    }
-                }
-                return;
-            }
-        }
-    }
-
-    // --- View Mode checkboxes --- (must match draw() layout)
-    float viewSectionY = colorBtnsY + 70;
+    // --- View Mode checkboxes ---
+    float viewSectionY = radioStartY + unitCount * radioH + 10;
+    viewSectionY += 10;
     float cbY1 = viewSectionY + 10;
     float cbY2 = cbY1 + 28;
-    float cbHitH = 22;
+    float cbHitH = 24;
+
     if (prefs) {
         if (x >= radioX && x <= px + panelW - 30 &&
             y >= cbY1 && y <= cbY1 + cbHitH) {
@@ -193,6 +98,20 @@ void SettingsModal::mousePressed(int x, int y) {
         if (x >= radioX && x <= px + panelW - 30 &&
             y >= cbY2 && y <= cbY2 + cbHitH) {
             prefs->setHideTitleBarInView(!prefs->getHideTitleBarInView());
+            prefs->saveLocal();
+            if (onPreferenceChanged) onPreferenceChanged();
+            return;
+        }
+    }
+
+    // --- Updates section ---
+    float updateSectionY = cbY2 + 28 + 10;
+    updateSectionY += 10;
+    float cbY3 = updateSectionY + 10;
+    if (prefs) {
+        if (x >= radioX && x <= px + panelW - 30 &&
+            y >= cbY3 && y <= cbY3 + cbHitH) {
+            prefs->setCheckForUpdatesOnStart(!prefs->getCheckForUpdatesOnStart());
             prefs->saveLocal();
             if (onPreferenceChanged) onPreferenceChanged();
             return;
@@ -229,13 +148,28 @@ static void drawRadio(float x, float y, float radioH, bool selected, const char*
     ofDrawBitmapString(label, x + 24, circleY + 4);
 }
 
+static void drawCheckbox(float x, float y, float size, bool checked, const char* label) {
+    ofNoFill();
+    ofSetColor(checked ? ofColor(0, 150, 255) : ofColor(100));
+    ofSetLineWidth(2);
+    ofDrawRectangle(x, y + 4, size, size);
+    ofFill();
+    ofSetLineWidth(1);
+    if (checked) {
+        ofSetColor(0, 150, 255);
+        ofDrawRectangle(x + 3, y + 7, size - 6, size - 6);
+    }
+    ofSetColor(180);
+    ofDrawBitmapString(label, x + size + 10, y + 15);
+}
+
 void SettingsModal::draw() {
     if (!visible) return;
 
     float W = ofGetWidth();
     float H = ofGetHeight();
     float panelW = 360;
-    float panelH = 500;
+    float panelH = 340;
     float px = (W - panelW) / 2;
     float py = (H - panelH) / 2;
 
@@ -275,113 +209,43 @@ void SettingsModal::draw() {
     float radioX = px + 30;
     float radioStartY = py + 80;
     float radioH = 28;
+    float cbSize = 14;
 
     for (int i = 0; i < unitCount; i++) {
         drawRadio(radioX, radioStartY + i * radioH, radioH, i == selectedUnitIndex, unitLabels[i]);
     }
 
-    // --- Background section ---
-    float bgSectionY = radioStartY + unitCount * radioH + 10;
-
-    ofSetColor(60);
-    ofDrawLine(px + 15, bgSectionY, px + panelW - 15, bgSectionY);
-
-    bgSectionY += 10;
-    ofSetColor(180);
-    ofDrawBitmapString("Background", px + 30, bgSectionY + 15);
-    float bgRadioStartY = bgSectionY + 25;
-
-    for (int i = 0; i < bgModeCount; i++) {
-        drawRadio(radioX, bgRadioStartY + i * radioH, radioH, i == selectedBgMode, bgModeLabels[i]);
-    }
-
-    // Color edit hints/buttons
-    float colorBtnsY = bgRadioStartY + bgModeCount * radioH + 10;
-    float btnW = 120;
-    float btnH = 24;
-
-    if (prefs) {
-        BackgroundMode mode = prefs->getBgMode();
-        if (mode == BackgroundMode::Solid) {
-            ofColor c = prefs->getBgColor();
-            // Color swatch
-            ofSetColor(c);
-            ofDrawRectangle(radioX, colorBtnsY, 20, btnH);
-            // Button
-            ofSetColor(80);
-            ofDrawRectangle(radioX + 25, colorBtnsY, btnW, btnH);
-            ofSetColor(200);
-            ofDrawBitmapString("Edit Color", radioX + 30, colorBtnsY + 16);
-        } else if (mode == BackgroundMode::Gradient) {
-            ofColor ct = prefs->getBgGradientTop();
-            ofColor cb = prefs->getBgGradientBottom();
-            // Top
-            ofSetColor(ct);
-            ofDrawRectangle(radioX, colorBtnsY, 20, btnH);
-            ofSetColor(80);
-            ofDrawRectangle(radioX + 25, colorBtnsY, btnW, btnH);
-            ofSetColor(200);
-            ofDrawBitmapString("Top Color", radioX + 30, colorBtnsY + 16);
-            // Bottom
-            float btn2Y = colorBtnsY + btnH + 8;
-            ofSetColor(cb);
-            ofDrawRectangle(radioX, btn2Y, 20, btnH);
-            ofSetColor(80);
-            ofDrawRectangle(radioX + 25, btn2Y, btnW, btnH);
-            ofSetColor(200);
-            ofDrawBitmapString("Bottom Color", radioX + 30, btn2Y + 16);
-        } else if (mode == BackgroundMode::Image) {
-            std::string path = prefs->getBgImagePath();
-            ofSetColor(160);
-            if (path.empty()) {
-                ofDrawBitmapString("No image loaded", radioX, colorBtnsY + 16);
-            } else {
-                std::string fname = ofFilePath::getFileName(path);
-                ofDrawBitmapString(fname, radioX, colorBtnsY + 16);
-            }
-        }
-    }
-
     // --- View Mode section ---
-    float viewSectionY = colorBtnsY + 70;
+    float viewSectionY = radioStartY + unitCount * radioH + 10;
+
     ofSetColor(60);
-    ofDrawLine(px + 15, viewSectionY - 8, px + panelW - 15, viewSectionY - 8);
+    ofDrawLine(px + 15, viewSectionY, px + panelW - 15, viewSectionY);
+
+    viewSectionY += 10;
     ofSetColor(180);
     ofDrawBitmapString("View Mode", px + 30, viewSectionY + 5);
 
     float cbY1 = viewSectionY + 10;
     float cbY2 = cbY1 + 28;
-    float cbSize = 14;
-    if (prefs) {
-        // Status bar checkbox
-        bool hideStatus = prefs->getHideStatusBarInView();
-        ofNoFill();
-        ofSetColor(hideStatus ? ofColor(0, 150, 255) : ofColor(100));
-        ofSetLineWidth(2);
-        ofDrawRectangle(radioX, cbY1 + 4, cbSize, cbSize);
-        ofFill();
-        ofSetLineWidth(1);
-        if (hideStatus) {
-            ofSetColor(0, 150, 255);
-            ofDrawRectangle(radioX + 3, cbY1 + 7, cbSize - 6, cbSize - 6);
-        }
-        ofSetColor(180);
-        ofDrawBitmapString("Hide status bar", radioX + cbSize + 10, cbY1 + 15);
 
-        // Title bar checkbox
-        bool hideTitle = prefs->getHideTitleBarInView();
-        ofNoFill();
-        ofSetColor(hideTitle ? ofColor(0, 150, 255) : ofColor(100));
-        ofSetLineWidth(2);
-        ofDrawRectangle(radioX, cbY2 + 4, cbSize, cbSize);
-        ofFill();
-        ofSetLineWidth(1);
-        if (hideTitle) {
-            ofSetColor(0, 150, 255);
-            ofDrawRectangle(radioX + 3, cbY2 + 7, cbSize - 6, cbSize - 6);
-        }
-        ofSetColor(180);
-        ofDrawBitmapString("Hide window title bar", radioX + cbSize + 10, cbY2 + 15);
+    if (prefs) {
+        drawCheckbox(radioX, cbY1, cbSize, prefs->getHideStatusBarInView(), "Hide status bar");
+        drawCheckbox(radioX, cbY2, cbSize, prefs->getHideTitleBarInView(), "Hide window title bar");
+    }
+
+    // --- Updates section ---
+    float updateSectionY = cbY2 + 28 + 10;
+
+    ofSetColor(60);
+    ofDrawLine(px + 15, updateSectionY, px + panelW - 15, updateSectionY);
+
+    updateSectionY += 10;
+    ofSetColor(180);
+    ofDrawBitmapString("Updates", px + 30, updateSectionY + 5);
+
+    float cbY3 = updateSectionY + 10;
+    if (prefs) {
+        drawCheckbox(radioX, cbY3, cbSize, prefs->getCheckForUpdatesOnStart(), "Check for updates on startup");
     }
 
     // Close button (X) — top-right

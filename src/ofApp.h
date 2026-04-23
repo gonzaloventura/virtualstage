@@ -14,6 +14,8 @@
 #include "CloudStorage.h"
 #include "Preferences.h"
 #include "SettingsModal.h"
+#include "Cabinet.h"
+#include "CabinetsModal.h"
 #include <mutex>
 #include <atomic>
 
@@ -30,6 +32,9 @@ public:
     void mouseDragged(int x, int y, int button) override;
     void mouseReleased(int x, int y, int button) override;
     void windowResized(int w, int h) override;
+
+    // Called by GLFW close callback (must be public)
+    void requestQuit();
 
 private:
     // Mode
@@ -78,10 +83,6 @@ private:
     bool showPosition = true;
     bool showRotation = true;
     bool showScale = true;
-
-    // Stage element add dropdown
-    bool stageAddMenuOpen = false;
-    float stageAddMenuY = 0; // Y position where dropdown opens
 
     // Camera lock (View mode)
     bool cameraLocked = false;
@@ -160,6 +161,9 @@ private:
     float screenshotFlashTimer = 0;
     void takeScreenshot();
 
+    // Export render
+    void exportRender();
+
     // Autosave
     bool autosaveEnabled = false;
     float autosaveInterval = 15.0f;
@@ -169,7 +173,7 @@ private:
     // Resolume XML import
     enum class LinkState { None, Confirm, ChooseRect };
     LinkState linkState = LinkState::None;
-    void loadResolumeXml(bool useInputRect);
+    void loadResolumeXml(bool useInputRect, const std::string& manualPath = "");
 
     // Input mapping 2D editor
     bool mappingMode = false;
@@ -189,8 +193,9 @@ private:
     std::string latestDownloadUrl;
     std::string updateErrorDetail;
     bool showUpdateModal = false;
+    bool silentUpdateCheck = false;  // true = only show modal if update available
     std::string updateZipPath;
-    void checkForUpdates();
+    void checkForUpdates(bool silent = false);
     void startDownloadAndUpdate();
     void launchUpdaterAndExit();
     void drawUpdateModal();
@@ -198,6 +203,13 @@ private:
     // About dialog
     bool showAboutDialog = false;
     void drawAboutDialog();
+
+    // Quit confirmation dialog
+    bool showQuitDialog = false;
+    bool quitHasUnsaved = false;
+    void drawQuitDialog();
+    int lastSavedUndoIndex = 0;  // undo index at last save
+    bool hasUnsavedChanges() const;
 
     // ── Authentication ──────────────────────────────────────────────────────
     AuthManager authManager;
@@ -247,4 +259,15 @@ private:
     Preferences preferences;
     SettingsModal settingsModal;
     std::atomic<bool> prefsNeedRefresh{false};
+
+    // ── Cabinets (LED panel library) ─────────────────────────────────────────
+    CabinetLibrary cabinetLibrary;
+    CabinetsModal  cabinetsModal;
+    std::atomic<bool> cabinetsNeedCloudSync{false};
+    // After a cabinet is created/edited, rescan all screens and auto-assign
+    // cabinets to any screen whose sourcePxWidth/sourcePxHeight matches.
+    void autoAssignCabinets();
+    // Recompute a screen's world size (plane width/height) from its cabinet
+    // pitch and sourcePx dimensions. No-op if no cabinet or no px data.
+    void applyCabinetToScreen(ScreenObject* scr);
 };

@@ -27,10 +27,21 @@ public:
     // Curvature
     void setCurvature(float deg);
     float getCurvature() const;
+    void setCurveExtent(float pct);   // 0-100%, portion of width that curves
+    float getCurveExtent() const;
 
     // Input mapping (crop) - normalized 0-1
     void setCropRect(const ofRectangle& r);
     const ofRectangle& getCropRect() const;
+
+    // Cabinet (LED panel spec) assignment — empty string = unassigned
+    std::string cabinetId;
+
+    // Original pixel dimensions (from Resolume import or similar). Used by the
+    // cabinet auto-detect and to recompute physical size when a cabinet is
+    // assigned. 0 = unknown.
+    int sourcePxWidth  = 0;
+    int sourcePxHeight = 0;
 
     // Per-screen video source (Syphon on macOS, Spout on Windows)
     int sourceIndex = -1;
@@ -68,6 +79,7 @@ public:
 private:
     // Curvature
     float curvature = 0;       // degrees of arc (-180 to 180)
+    float curveExtent = 100;   // % of width that curves (0-100)
     ofVboMesh curvedMesh;
     int meshColumns = 32;
     int meshRows = 2;

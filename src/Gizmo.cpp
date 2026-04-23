@@ -3,30 +3,28 @@
 
 // --- GizmoTarget accessors ---
 glm::vec3 GizmoTarget::getPosition() const {
-    return (type == Screen) ? screen->getPosition() : element->getPosition();
+    return screen->getPosition();
 }
 void GizmoTarget::setPosition(const glm::vec3& p) {
-    if (type == Screen) screen->setPosition(p); else element->setPosition(p);
+    screen->setPosition(p);
 }
 glm::vec3 GizmoTarget::getRotationEuler() const {
-    return (type == Screen) ? screen->getRotationEuler() : element->getRotationEuler();
+    return screen->getRotationEuler();
 }
 void GizmoTarget::setRotationEuler(const glm::vec3& e) {
-    if (type == Screen) screen->setRotationEuler(e); else element->setRotationEuler(e);
+    screen->setRotationEuler(e);
 }
 glm::vec3 GizmoTarget::getScale() const {
-    return (type == Screen) ? screen->getScale() : element->getScale();
+    return screen->getScale();
 }
 void GizmoTarget::setScale(const glm::vec3& s) {
-    if (type == Screen) screen->setScale(s); else element->setScale(s);
+    screen->setScale(s);
 }
 float GizmoTarget::getHalfWidth() const {
-    if (type == Screen) return screen->getPlaneWidth() * screen->getScale().x * 0.5f;
-    return element->width * element->getScale().x * 0.5f;
+    return screen->getPlaneWidth() * screen->getScale().x * 0.5f;
 }
 float GizmoTarget::getHalfHeight() const {
-    if (type == Screen) return screen->getPlaneHeight() * screen->getScale().y * 0.5f;
-    return element->height * element->getScale().y * 0.5f;
+    return screen->getPlaneHeight() * screen->getScale().y * 0.5f;
 }
 
 // --- Gizmo ---
@@ -243,7 +241,7 @@ void Gizmo::updateDrag(const glm::vec2& screenPos, const ofCamera& cam) {
                     // Skip self
                     bool isSelf = false;
                     for (auto& dt : dragTargets) {
-                        if (dt.target.type == GizmoTarget::Screen && dt.target.screen == other.get()) {
+                        if (dt.target.screen == other.get()) {
                             isSelf = true; break;
                         }
                     }

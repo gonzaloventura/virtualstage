@@ -1,18 +1,13 @@
 #pragma once
 #include "ofMain.h"
 #include "ScreenObject.h"
-#include "StageElement.h"
 #include <vector>
 
-// Lightweight wrapper so Gizmo can manipulate either type
 struct GizmoTarget {
-    enum Type { Screen, StageElem };
-    Type type;
-    union { ScreenObject* screen; StageElement* element; };
+    ScreenObject* screen = nullptr;
 
-    GizmoTarget() : type(Screen), screen(nullptr) {}
-    GizmoTarget(ScreenObject* s) : type(Screen), screen(s) {}
-    GizmoTarget(StageElement* e) : type(StageElem), element(e) {}
+    GizmoTarget() {}
+    GizmoTarget(ScreenObject* s) : screen(s) {}
 
     glm::vec3 getPosition() const;
     void setPosition(const glm::vec3& p);

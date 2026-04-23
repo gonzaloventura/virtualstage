@@ -47,15 +47,24 @@ bool CloudStorage::restRequest(const std::string& method,
 
     std::string url = std::string(SUPABASE_URL) + endpoint;
 
+    if (!session.valid()) {
+        outError = "Not authenticated";
+        return false;
+    }
+
     bool hasBody = !jsonBody.empty();
     if (hasBody) {
         std::ofstream bf(bodyFile);
         if (!bf.is_open()) { outError = "Could not write temp file"; return false; }
         bf << jsonBody;
+        bf.close(); // ensure flushed before curl reads it
     }
 
 #ifdef TARGET_OSX
-    std::string cmd = "curl -s -X " + method + " "
+    // Write HTTP status code to a separate file for error checking
+    std::string statusFile = dir + "/cloud_status.txt";
+    std::string cmd = "curl -s -o \"" + respFile + "\" -w '%{http_code}' "
+        "-X " + method + " "
         "-H \"apikey: " + std::string(SUPABASE_ANON_KEY) + "\" "
         "-H \"Authorization: Bearer " + session.accessToken + "\" ";
 
@@ -68,9 +77,10 @@ bool CloudStorage::restRequest(const std::string& method,
     if (hasBody) {
         cmd += "-d @\"" + bodyFile + "\" ";
     }
-    cmd += "\"" + url + "\" -o \"" + respFile + "\" 2>/dev/null";
+    cmd += "\"" + url + "\" > \"" + statusFile + "\" 2>/dev/null";
 
 #elif defined(TARGET_WIN32)
+    std::string statusFile; // not used on Windows
     std::string cmd = "powershell -Command \""
         "$h = @{"
         "'apikey'='" + std::string(SUPABASE_ANON_KEY) + "';"
@@ -98,11 +108,33 @@ bool CloudStorage::restRequest(const std::string& method,
 
     if (hasBody) std::remove(bodyFile.c_str());
 
+    // Check HTTP status code (macOS only - written by curl -w)
+    int httpStatus = 0;
+#ifdef TARGET_OSX
+    {
+        std::ifstream sf(statusFile);
+        if (sf.is_open()) {
+            sf >> httpStatus;
+            sf.close();
+        }
+        std::remove(statusFile.c_str());
+    }
+#endif
+
+    // Read response body
     std::ifstream rf(respFile);
     if (!rf.is_open()) {
-        // Empty response is OK for DELETE (204 No Content)
-        outResponse = ofJson::array();
-        return true;
+        if (httpStatus >= 200 && httpStatus < 300) {
+            // Successful HTTP status with empty body (e.g., 201 Created)
+            outResponse = ofJson::array();
+            return true;
+        }
+        if (httpStatus == 0) {
+            outError = "Could not connect to server";
+        } else {
+            outError = "HTTP error " + std::to_string(httpStatus);
+        }
+        return false;
     }
     try {
         outResponse = ofJson::parse(rf);
@@ -110,7 +142,9 @@ bool CloudStorage::restRequest(const std::string& method,
         outResponse = ofJson::array();
         rf.close();
         std::remove(respFile.c_str());
-        return true; // empty / non-JSON response treated as success
+        if (httpStatus >= 200 && httpStatus < 300) return true;
+        outError = "HTTP error " + std::to_string(httpStatus);
+        return httpStatus == 0; // 0 means we couldn't get status, assume ok
     }
     rf.close();
     std::remove(respFile.c_str());
@@ -163,6 +197,7 @@ bool CloudStorage::saveProject(const AuthManager::Session& session,
                                 const std::string& projectName,
                                 std::string& outError) {
     ofJson body;
+    body["user_id"] = session.userId;
     body["name"] = projectName;
     body["data"] = projectData;
 
@@ -227,9 +262,43 @@ bool CloudStorage::savePreferences(const AuthManager::Session& session,
                                     const std::string& jsonData,
                                     std::string& outError) {
     ofJson body;
+    body["user_id"] = session.userId;
     body["data"] = ofJson::parse(jsonData);
 
     std::string endpoint = "/rest/v1/user_preferences?on_conflict=user_id";
+    std::string extraH   = "-H \"Prefer: resolution=merge-duplicates\"";
+
+    ofJson resp;
+    return restRequest("POST", endpoint, session, extraH, body.dump(), resp, outError);
+}
+
+// ─── User cabinets ──────────────────────────────────────────────────────────
+
+bool CloudStorage::loadCabinets(const AuthManager::Session& session,
+                                 std::string& outData,
+                                 std::string& outError) {
+    std::string endpoint = "/rest/v1/user_cabinets?select=data";
+    ofJson resp;
+    if (!restRequest("GET", endpoint, session, "", "", resp, outError)) {
+        return false;
+    }
+
+    outData.clear();
+    if (!resp.is_array() || resp.empty()) return true; // no cabinets yet
+    if (resp[0].contains("data") && resp[0]["data"].is_object()) {
+        outData = resp[0]["data"].dump();
+    }
+    return true;
+}
+
+bool CloudStorage::saveCabinets(const AuthManager::Session& session,
+                                 const std::string& jsonData,
+                                 std::string& outError) {
+    ofJson body;
+    body["user_id"] = session.userId;
+    body["data"]    = ofJson::parse(jsonData);
+
+    std::string endpoint = "/rest/v1/user_cabinets?on_conflict=user_id";
     std::string extraH   = "-H \"Prefer: resolution=merge-duplicates\"";
 
     ofJson resp;

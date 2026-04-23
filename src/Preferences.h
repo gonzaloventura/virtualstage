@@ -53,6 +53,10 @@ public:
     bool getHideTitleBarInView() const;
     void setHideTitleBarInView(bool v);
 
+    // Update checking
+    bool getCheckForUpdatesOnStart() const;
+    void setCheckForUpdatesOnStart(bool v);
+
     // Serialize to/from JSON string (for cloud sync)
     std::string toJsonString() const;
     void fromJsonString(const std::string& jsonStr);
@@ -66,6 +70,7 @@ private:
     std::string bgImagePath;
     bool hideStatusBarInView = false;
     bool hideTitleBarInView = false;
+    bool checkForUpdatesOnStart = true;
     mutable std::mutex mtx;
 
     std::string getPrefsDir() const;   // ~/.virtualstage/

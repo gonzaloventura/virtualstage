@@ -48,15 +48,16 @@ private:
     ofParameter<float> posX{"X", 0, -2000, 2000};
     ofParameter<float> posY{"Y", 0, -2000, 2000};
     ofParameter<float> posZ{"Z", 0, -2000, 2000};
-    ofParameter<float> rotX{"Pitch", 0, -180, 180};
-    ofParameter<float> rotY{"Yaw", 0, -180, 180};
-    ofParameter<float> rotZ{"Roll", 0, -180, 180};
+    ofParameter<float> rotX{"X", 0, -180, 180};
+    ofParameter<float> rotY{"Y", 0, -180, 180};
+    ofParameter<float> rotZ{"Z", 0, -180, 180};
     ofParameter<float> widthParam{"Width (m)", 3.2, 0.01, 100};
     ofParameter<float> heightParam{"Height (m)", 1.8, 0.01, 100};
 
     ofParameter<float> curvatureParam{"Curvature", 0, -180, 180};
+    ofParameter<float> curveExtentParam{"Curve %", 100, 0, 100};
 
-    ofParameter<bool> mirrorYaw{"Mirror Yaw", false};
+    ofParameter<bool> mirrorYaw{"Mirror (Y)", false};
     ofParameter<float> gapParam{"Gap (m)", 0, 0, 50};
 
     // Standalone GUI groups (drawn manually, not inside panel)
@@ -83,6 +84,7 @@ private:
     glm::vec3 lastRot;
     glm::vec2 lastSize;
     float lastCurvature = 0;
+    float lastCurveExtent = 100;
     float lastGap = 0;
 
     // Group visibility flags
